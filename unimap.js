@@ -112,3 +112,4 @@ export class MyMapLib {
     return this.adapter.destroy();
   }
 }
+
