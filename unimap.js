@@ -1,3 +1,4 @@
+// Version: 2.2.7 - MapmyIndia Support
 import { SUPPORTED_PROVIDERS } from './utils/constants.js';
 import { throwIfMissing } from './utils/common.js';
 
@@ -5,6 +6,12 @@ import { GoogleMapsAdapter } from './adapters/GoogleMapsAdapter.js';
 import { MapboxAdapter } from './adapters/MapboxAdapter.js';
 import { BingMapsAdapter } from './adapters/BingMapsAdapter.js';
 import { OSMAdapter } from './adapters/OSMAdapter.js';
+import { AzureMapsAdapter } from './adapters/AzureMapsAdapter.js';
+import { HereMapsAdapter } from './adapters/HereMapsAdapter.js';
+import { TomTomAdapter } from './adapters/TomTomAdapter.js';
+import { YandexMapsAdapter } from './adapters/YandexMapsAdapter.js';
+import { CartoAdapter } from './adapters/CartoAdapter.js';
+import { MapmyIndiaAdapter } from './adapters/MapmyIndiaAdapter.js';
 
 export class UniMap {
   constructor({ provider, apiKey, containerId, options = {} }) {
@@ -35,6 +42,24 @@ export class UniMap {
         break;
       case 'osm':
         this.adapter = new OSMAdapter(this.apiKey, this.containerId, this.options);
+        break;
+      case 'azure':
+        this.adapter = new AzureMapsAdapter(this.apiKey, this.containerId, this.options);
+        break;
+      case 'here':
+        this.adapter = new HereMapsAdapter(this.apiKey, this.containerId, this.options);
+        break;
+      case 'tomtom':
+        this.adapter = new TomTomAdapter(this.apiKey, this.containerId, this.options);
+        break;
+      case 'yandex':
+        this.adapter = new YandexMapsAdapter(this.apiKey, this.containerId, this.options);
+        break;
+      case 'carto':
+        this.adapter = new CartoAdapter(this.apiKey, this.containerId, this.options);
+        break;
+      case 'mapmyindia':
+        this.adapter = new MapmyIndiaAdapter(this.apiKey, this.containerId, this.options);
         break;
       default:
         throw new Error('Adapter not implemented for this provider');

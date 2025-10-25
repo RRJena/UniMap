@@ -16,13 +16,16 @@ export class MapboxAdapter extends BaseAdapter {
       throw new Error(`Container element with ID '${this.containerId}' not found.`);
     }
 
+    // Validate center coordinates
+    const centerLat = typeof this.options.center?.lat === 'number' ? this.options.center.lat : 0;
+    const centerLng = typeof this.options.center?.lng === 'number' ? this.options.center.lng : 0;
+
     this.map = new mapboxgl.Map({
       container: this.containerId,
       style: this.options.style || 'mapbox://styles/mapbox/streets-v11',
-      center: [this.options.center?.lng || 0, this.options.center?.lat || 0],
+      center: [centerLng, centerLat],
       zoom: this.options.zoom || 10,
-      accessToken: this.apiKey,
-      ...this.options
+      accessToken: this.apiKey
     });
 
     await new Promise((resolve) => {

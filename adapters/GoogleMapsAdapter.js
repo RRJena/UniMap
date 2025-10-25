@@ -44,11 +44,8 @@ export class GoogleMapsAdapter extends BaseAdapter {
   loadGoogleMapsScript() {
     return new Promise((resolve, reject) => {
       if (window.google && window.google.maps) {
-        console.log('Google Maps already loaded');
         return resolve();
       }
-
-      console.log('Loading Google Maps script...');
       
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=${this.apiKey}&libraries=places,visualization,geometry&callback=initGoogleMaps`;
@@ -56,12 +53,10 @@ export class GoogleMapsAdapter extends BaseAdapter {
       script.defer = true;
       
       window.initGoogleMaps = () => {
-        console.log('Google Maps script loaded successfully');
         resolve();
       };
       
       script.onerror = (error) => {
-        console.error('Failed to load Google Maps script:', error);
         reject(new Error('Failed to load Google Maps script'));
       };
       
@@ -95,7 +90,7 @@ export class GoogleMapsAdapter extends BaseAdapter {
           }
         });
       });
-      console.log('Google Maps API key validated successfully');
+      // Google Maps API key validated successfully
     } catch (error) {
       throw new Error(`API key validation failed: ${error.message}`);
     }
