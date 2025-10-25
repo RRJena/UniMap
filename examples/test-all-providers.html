@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniMap - Test All Providers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        select, button {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        select {
+            background: white;
+        }
+
+        select:focus, button:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            border: none;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #e0e0e0;
+        }
+
+        .status {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .status h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .status-item {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .test-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .test-buttons button {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ UniMap - All Providers Test</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="provider">Provider:</label>
+                <select id="provider">
+                    <option value="google">Google Maps</option>
+                    <option value="mapbox">Mapbox</option>
+                    <option value="bing">Bing Maps</option>
+                    <option value="osm">OpenStreetMap</option>
+                    <option value="azure">Azure Maps</option>
+                    <option value="here">HERE Maps</option>
+                    <option value="tomtom">TomTom</option>
+                    <option value="yandex">Yandex Maps</option>
+                    <option value="carto">CARTO</option>
+                    <option value="mapmyindia">MapmyIndia</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="apiKey">API Key:</label>
+                <input type="text" id="apiKey" placeholder="Enter API key" />
+            </div>
+
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button onclick="initMap()">Initialize Map</button>
+            </div>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="test-buttons">
+            <button onclick="testAddMarker()">Add Marker</button>
+            <button onclick="testGeocode()">Test Geocoding</button>
+            <button onclick="testReverseGeocode()">Reverse Geocode</button>
+            <button onclick="testDrawRoute()">Draw Route</button>
+            <button onclick="testDirections()">Get Directions</button>
+            <button onclick="testShapes()">Add Shapes</button>
+            <button onclick="testHeatmap()">Add Heatmap</button>
+            <button onclick="testUserLocation()">Get User Location</button>
+            <button onclick="clearMap()">Clear Map</button>
+        </div>
+
+        <div class="status">
+            <h3>Status Log:</h3>
+            <div id="statusLog"></div>
+        </div>
+
+        <div class="note">
+            <strong>Note:</strong> This test page requires valid API keys for each provider. 
+            Some providers may not work without proper CORS configuration when loaded from file:// 
+            Use a local server for best results.
+        </div>
+    </div>
+
+    <script type="module">
+        import { UniMap } from '../unimap.js';
+
+        let map = null;
+        let markers = [];
+        let shapes = [];
+
+        window.initMap = async function() {
+            const provider = document.getElementById('provider').value;
+            const apiKey = document.getElementById('apiKey').value;
+
+            if (!apiKey) {
+                addStatus('Please enter an API key', 'error');
+                return;
+            }
+
+            try {
+                addStatus(`Initializing ${provider} map...`, 'success');
+                
+                map = new UniMap({
+                    provider: provider,
+                    apiKey: apiKey,
+                    containerId: 'map',
+                    options: {
+                        center: { lat: 37.7749, lng: -122.4194 }, // San Francisco
+                        zoom: 13
+                    }
+                });
+
+                await map.init();
+                addStatus(`✅ ${provider} map initialized successfully!`, 'success');
+
+                // Test basic functionality
+                setTimeout(() => {
+                    testAddMarker();
+                }, 1000);
+
+            } catch (error) {
+                addStatus(`❌ Error initializing map: ${error.message}`, 'error');
+                console.error(error);
+            }
+        };
+
+        window.testAddMarker = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const markerId = map.addMarker({
+                    lat: 37.7749 + (Math.random() - 0.5) * 0.02,
+                    lng: -122.4194 + (Math.random() - 0.5) * 0.02,
+                    title: 'Test Marker',
+                    label: '📍'
+                });
+                markers.push(markerId);
+                addStatus(`✅ Marker added: ${markerId}`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding marker: ${error.message}`, 'error');
+            }
+        };
+
+        window.testGeocode = async function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                addStatus('Testing geocoding...', 'success');
+                const result = await map.geocode('Golden Gate Bridge, San Francisco');
+                addStatus(`✅ Geocoding result: ${result.formattedAddress}`, 'success');
+                
+                const markerId = map.addMarker({
+                    lat: result.lat,
+                    lng: result.lng,
+                    title: result.formattedAddress
+                });
+                markers.push(markerId);
+                
+                map.setCenter({ lat: result.lat, lng: result.lng });
+            } catch (error) {
+                addStatus(`❌ Geocoding error: ${error.message}`, 'error');
+            }
+        };
+
+        window.testReverseGeocode = async function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                addStatus('Testing reverse geocoding...', 'success');
+                const center = map.getCenter();
+                const result = await map.reverseGeocode(center.lat, center.lng);
+                addStatus(`✅ Reverse geocoding result: ${result.formattedAddress}`, 'success');
+            } catch (error) {
+                addStatus(`❌ Reverse geocoding error: ${error.message}`, 'error');
+            }
+        };
+
+        window.testDrawRoute = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const coords = [
+                    { lat: 37.7749, lng: -122.4194 },
+                    { lat: 37.7849, lng: -122.4294 },
+                    { lat: 37.7949, lng: -122.4394 }
+                ];
+
+                const routeId = map.drawRoute(coords, {
+                    strokeColor: '#FF0000',
+                    strokeWeight: 5
+                });
+                shapes.push(routeId);
+                addStatus(`✅ Route drawn: ${routeId}`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error drawing route: ${error.message}`, 'error');
+            }
+        };
+
+        window.testDirections = async function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                addStatus('Testing directions...', 'success');
+                const result = await map.getDirections(
+                    { lat: 37.7749, lng: -122.4194 },
+                    { lat: 37.8049, lng: -122.4494 }
+                );
+                addStatus(`✅ Directions: Distance ${Math.round(result.distance)}m, Duration ${Math.round(result.duration)}s`, 'success');
+                shapes.push(result.routeId);
+            } catch (error) {
+                addStatus(`❌ Directions error: ${error.message}`, 'error');
+            }
+        };
+
+        window.testShapes = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                // Test circle
+                const circleId = map.drawCircle(
+                    { lat: 37.7849, lng: -122.4294 },
+                    500,
+                    {
+                        fillColor: '#FF0000',
+                        strokeColor: '#000000',
+                        fillOpacity: 0.3
+                    }
+                );
+                shapes.push(circleId);
+
+                // Test polygon
+                const polygonId = map.drawPolygon([
+                    { lat: 37.7649, lng: -122.4094 },
+                    { lat: 37.7749, lng: -122.4094 },
+                    { lat: 37.7749, lng: -122.4194 },
+                    { lat: 37.7649, lng: -122.4194 }
+                ], {
+                    fillColor: '#00FF00',
+                    strokeColor: '#000000'
+                });
+                shapes.push(polygonId);
+
+                addStatus(`✅ Shapes added`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding shapes: ${error.message}`, 'error');
+            }
+        };
+
+        window.testHeatmap = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const points = [];
+                for (let i = 0; i < 20; i++) {
+                    points.push({
+                        lat: 37.7749 + (Math.random() - 0.5) * 0.05,
+                        lng: -122.4194 + (Math.random() - 0.5) * 0.05,
+                        weight: Math.random()
+                    });
+                }
+
+                const heatmapId = map.addHeatMap(points, {
+                    radius: 30,
+                    opacity: 0.6
+                });
+                
+                if (heatmapId) {
+                    shapes.push(heatmapId);
+                    addStatus(`✅ Heatmap added`, 'success');
+                } else {
+                    addStatus('ℹ️ Heatmap not supported by this provider', 'success');
+                }
+            } catch (error) {
+                addStatus(`❌ Error adding heatmap: ${error.message}`, 'error');
+            }
+        };
+
+        window.testUserLocation = async function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                addStatus('Getting user location...', 'success');
+                const location = await map.getUserLocation();
+                addStatus(`✅ User location: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`, 'success');
+                
+                const markerId = map.addMarker({
+                    lat: location.lat,
+                    lng: location.lng,
+                    title: 'Your Location',
+                    label: '📍'
+                });
+                markers.push(markerId);
+                
+                map.setCenter({ lat: location.lat, lng: location.lng });
+            } catch (error) {
+                addStatus(`❌ Location error: ${error.message}`, 'error');
+            }
+        };
+
+        window.clearMap = function() {
+            if (!map) return;
+
+            try {
+                markers.forEach(id => map.removeMarker(id));
+                shapes.forEach(id => {
+                    try { map.removeLayer(id); } catch(e) {}
+                });
+                markers = [];
+                shapes = [];
+                addStatus('✅ Map cleared', 'success');
+            } catch (error) {
+                addStatus(`❌ Error clearing map: ${error.message}`, 'error');
+            }
+        };
+
+        function addStatus(message, type) {
+            const log = document.getElementById('statusLog');
+            const item = document.createElement('div');
+            item.className = `status-item status-${type}`;
+            item.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.insertBefore(item, log.firstChild);
+            
+            // Keep only last 20 entries
+            while (log.children.length > 20) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // Auto-load first provider
+        window.addEventListener('load', () => {
+            addStatus('UniMap test page loaded. Enter an API key and click Initialize Map.', 'success');
+        });
+    </script>
+</body>
+</html>
