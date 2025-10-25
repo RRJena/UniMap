@@ -350,68 +350,144 @@ Helper functions and constants.
 
 - Modern web browser (Chrome 60+, Firefox 55+, Safari 12+, Edge 79+)
 - HTTP server (for local development)
+- API keys for map providers (optional for OpenStreetMap)
+
+### Quick Start
+
+1. **Clone or download the repository**
+2. **Set up configuration** (see Configuration section below)
+3. **Start a local server** (see Development Server section below)
+4. **Open the example** in your browser
+
+### Configuration
+
+Before running the application, you need to set up your API keys:
+
+1. **Create `config.js`**: Copy `config.example.js` to `config.js` in the root directory:
+   ```bash
+   cp config.example.js config.js
+   ```
+
+2. **Add API Keys**: Open `config.js` and replace the placeholder values with your actual API keys:
+   ```javascript
+   window.UNIMAP_CONFIG = {
+     google: {
+       apiKey: 'your_actual_google_maps_api_key'
+     },
+     bing: {
+       apiKey: 'your_actual_bing_maps_api_key'
+     }
+     // ... other providers
+   };
+   ```
+
+3. **Get API Keys** from your chosen providers:
+   - [Google Maps](https://developers.google.com/maps/documentation/javascript/get-api-key)
+   - [Mapbox](https://account.mapbox.com/access-tokens/)
+   - [Bing Maps](https://www.microsoft.com/en-us/maps/create-a-bing-maps-key)
+
+4. **Important**: Never commit `config.js` to version control as it contains sensitive API keys.
 
 ### Development Server
+
+Since UniMap uses ES6 modules, you need to serve the files through an HTTP server:
 
 ```bash
 # Using Python 3
 python3 -m http.server 8000
 
-# Using Node.js
+# Using Node.js (if you have http-server installed)
 npx http-server
 
 # Using PHP
 php -S localhost:8000
+
+# Using Node.js serve package
+npx serve .
 ```
 
-### Open in Browser
+### Running Examples
 
-```
-http://localhost:8000/example/index.html
-```
+#### Main Example (`example/index.html`)
 
-### With API Keys
+The main example demonstrates all UniMap features with a comprehensive interface:
 
-1. Get API keys from your chosen provider:
-   - [Google Maps](https://developers.google.com/maps/documentation/javascript/get-api-key)
-   - [Mapbox](https://account.mapbox.com/access-tokens/)
-   - [Bing Maps](https://www.microsoft.com/en-us/maps/create-a-bing-maps-key)
+1. **Start your development server** (see above)
+2. **Open in browser**: `http://localhost:8000/example/index.html`
+3. **Features available**:
+   - Switch between different map providers
+   - Add markers, polylines, and polygons
+   - Test geocoding and reverse geocoding
+   - Draw routes and shapes
+   - Test user location features
 
-2. Update the API key in your HTML:
+#### Google Maps Example (`example/googleMap.html`)
 
-```html
-<script type="module">
-  const map = new UniMap({
-    provider: 'google',
-    apiKey: 'YOUR_API_KEY_HERE',
-    containerId: 'map',
-    options: {
-      center: { lat: 40.7128, lng: -74.0060 },
-      zoom: 12
-    }
-  });
-  
-  await map.init();
-</script>
-```
+A focused example for Google Maps:
 
-### Testing Different Providers
+1. **Open**: `http://localhost:8000/example/googleMap.html`
+2. **Enter your Google Maps API key** in the provided input field
+3. **Test Google Maps features** including markers, geocoding, and routing
 
-Switch providers easily:
+#### Testing Google Maps API Key (`test-google-maps.html`)
+
+A dedicated tool to test and validate your Google Maps API key:
+
+1. **Open**: `http://localhost:8000/test-google-maps.html`
+2. **Enter your Google Maps API key** in the input field
+3. **Click "Test API Key"** to validate your key and check for common errors:
+   - Invalid key format
+   - Disabled APIs
+   - Billing issues
+   - Quota exceeded
+4. **Click "Load Map"** to see a basic map display if the key is valid
+
+### Using Different Providers
+
+Switch providers easily in your code:
 
 ```javascript
-// Google Maps
+// Google Maps (requires API key)
 provider: 'google'
 
-// Mapbox
+// Mapbox (requires API key)
 provider: 'mapbox'
 
-// Bing Maps
+// Bing Maps (requires API key)
 provider: 'bing'
 
 // OpenStreetMap (no API key needed)
 provider: 'osm'
 ```
+
+### Direct File Opening
+
+**Note**: Due to CORS restrictions with ES6 modules, you cannot simply open HTML files directly in the browser. You must use an HTTP server.
+
+If you try to open files directly, you'll see errors like:
+```
+Access to script at 'file:///...' from origin 'null' has been blocked by CORS policy
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **CORS Errors**: Make sure you're using an HTTP server, not opening files directly
+2. **API Key Errors**: Verify your API keys are correct and have the necessary APIs enabled
+3. **Map Not Loading**: Check browser console for error messages
+4. **Module Import Errors**: Ensure you're using a modern browser that supports ES6 modules
+
+#### Browser Console
+
+Always check the browser console (F12) for error messages when troubleshooting issues.
+
+### Development Workflow
+
+1. **Make changes** to your code
+2. **Refresh the browser** to see changes
+3. **Check console** for any errors
+4. **Test different providers** to ensure compatibility
 
 ---
 
@@ -428,8 +504,17 @@ git clone https://github.com/yourusername/unimap.git
 # Navigate to directory
 cd unimap
 
-# Open example
-open example/index.html
+# Set up configuration
+cp config.example.js config.js
+# Edit config.js with your API keys
+
+# Start development server
+python3 -m http.server 8000
+# or
+npx http-server
+
+# Open example in browser
+# http://localhost:8000/example/index.html
 ```
 
 ---
