@@ -309,16 +309,19 @@ map.on('zoom_changed', () => {
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE.md](https://github.com/RRJena/UniMap/blob/dev/LICENSE.md) file for details.
 
 ---
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/unimap/unimap/issues)
-- **Documentation**: [Full API Docs](https://github.com/unimap/unimap/wiki)
-- **Email**: support@unimap.dev
+- **Issues**: [GitHub Issues](https://github.com/RRJena/UniMap/issues)
+- **Documentation**: [Full API Docs](https://github.com/RRJena/UniMap/#readme)
+- **Wiki**: [GitHub Wiki](https://github.com/RRJena/UniMap/#readme)
+- **LinkedIn**: [Rakesh Ranjan Jena](https://www.linkedin.com/in/rrjprince/)
+- **Author Blog**: [rrjprince.com](http://www.rrjprince.com/)
+- **Website**: [rakeshranjanjena.com](https://www.rakeshranjanjena.com)
 
 ---
 
-**Made with ❤️ by the UniMap Team**
+**Made with ❤️ by Rakesh Ranjan Jena**
