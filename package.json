@@ -1,0 +1,61 @@
+{
+  "name": "unimap",
+  "version": "2.0.0",
+  "description": "Unified mapping library for multiple map service providers - Google Maps, Mapbox, Bing Maps, OpenStreetMap, and more",
+  "main": "unimap.js",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build step required - ES6 modules ready'",
+    "test": "echo 'Tests coming soon'",
+    "dev": "echo 'Open example/index.html in a browser'",
+    "lint": "echo 'Linting coming soon'",
+    "format": "echo 'Formatting coming soon'"
+  },
+  "keywords": [
+    "maps",
+    "mapping",
+    "google-maps",
+    "mapbox",
+    "bing-maps",
+    "openstreetmap",
+    "osm",
+    "leaflet",
+    "geocoding",
+    "routing",
+    "unified",
+    "adapter",
+    "provider-agnostic",
+    "javascript",
+    "es6",
+    "typescript"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/unimap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/unimap/issues"
+  },
+  "homepage": "https://github.com/yourusername/unimap#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ],
+  "files": [
+    "unimap.js",
+    "adapters/",
+    "utils/",
+    "example/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {},
+  "peerDependencies": {},
+  "dependencies": {}
+}

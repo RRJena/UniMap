@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>UniMap with Google Maps</title>
+  <style>
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- ✅ Load your bundled UniMap library (make sure this file exists) -->
+  <script src="./build/unimap.mini.js"></script>
+
+  <script>
+    // ✅ Make sure UniMap is defined in the window (check your MyMapLib.js exposes it)
+    if (typeof UniMap === 'undefined') {
+      console.error('❌ UniMap is not defined. Did you forget to expose MyMapLib to window?');
+    } else {
+      const map = new UniMap({
+        provider: 'google',
+        apiKey: 'AIzaSyDyuTcJfU76qDpUhA2MOfqQvjXhBGJjZR8', // 🔑 Replace this with your real key
+        containerId: 'map',
+        options: {
+          center: { lat: 12.9716, lng: 77.5946 }, // Bangalore
+          zoom: 12,
+          styles: [] // Optional map styling
+        }
+      });
+
+      (async () => {
+        await map.init();
+
+        // ✅ Add a marker
+        const marker = map.addMarker({
+          lat: 12.9716,
+          lng: 77.5946,
+          label: 'B'
+        });
+
+        // ✅ Draw a route (polyline)
+        map.drawRoute([
+          { lat: 12.9716, lng: 77.5946 },
+          { lat: 12.2958, lng: 76.6394 } // Mysore
+        ]);
+
+        // ✅ Enable traffic layer
+        map.enableTrafficLayer();
+
+        // ✅ Track real-time user location
+        /*
+        map.trackUserLocation((pos) => {
+          console.log('Real-time position:', pos);
+        });
+        */
+
+        // ✅ Optional: Add heatmap
+        /*
+        map.addHeatMap([
+          { lat: 12.9716, lng: 77.5946 },
+          { lat: 12.2958, lng: 76.6394 }
+        ]);
+        */
+      })();
+    }
+  </script>
+
+</body>
+</html>
