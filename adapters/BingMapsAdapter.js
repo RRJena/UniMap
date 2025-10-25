@@ -142,6 +142,10 @@ export class BingMapsAdapter extends BaseAdapter {
   }
 
   async geocode(address) {
+    if (!address || typeof address !== 'string') {
+      return Promise.reject(new Error('Address must be a non-empty string'));
+    }
+
     return new Promise((resolve, reject) => {
       // Load the Search module if not already loaded
       Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
@@ -159,11 +163,11 @@ export class BingMapsAdapter extends BaseAdapter {
                 formattedAddress: geocodeResult.results[0].address.formattedAddress
               });
             } else {
-              reject('No results found');
+              reject(new Error('No results found'));
             }
           },
           errorCallback: (error) => {
-            reject(`Geocoding failed: ${error}`);
+            reject(new Error(`Geocoding failed: ${error}`));
           }
         };
         
@@ -174,7 +178,7 @@ export class BingMapsAdapter extends BaseAdapter {
 
   async reverseGeocode(lat, lng) {
     if (!this._validateCoordinates(lat, lng)) {
-      return Promise.reject('Invalid coordinates');
+      return Promise.reject(new Error('Invalid coordinates'));
     }
 
     return new Promise((resolve, reject) => {
@@ -194,11 +198,11 @@ export class BingMapsAdapter extends BaseAdapter {
                 components: reverseGeocodeResult.address
               });
             } else {
-              reject('No results found');
+              reject(new Error('No results found'));
             }
           },
           errorCallback: (error) => {
-            reject(`Reverse geocoding failed: ${error}`);
+            reject(new Error(`Reverse geocoding failed: ${error}`));
           }
         };
         
@@ -227,60 +231,81 @@ export class BingMapsAdapter extends BaseAdapter {
   }
 
   async getDirections(origin, destination, options = {}) {
+    // Validate inputs
+    if (!origin || typeof origin.lat !== 'number' || typeof origin.lng !== 'number') {
+      return Promise.reject(new Error('Origin must be an object with numeric lat and lng properties'));
+    }
+    
+    if (!destination || typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+      return Promise.reject(new Error('Destination must be an object with numeric lat and lng properties'));
+    }
+
     return new Promise((resolve, reject) => {
       try {
-        // Create a new DirectionsManager instance
-        const directionsManager = new Microsoft.Maps.Directions.DirectionsManager(this.map);
-        
-        // Set route options
-        directionsManager.setRequestOptions({
-          routeMode: options.travelMode || Microsoft.Maps.Directions.RouteMode.driving,
-          routeOptimization: options.optimizeWaypoints ? 
-            Microsoft.Maps.Directions.RouteOptimization.shortestTime : 
-            Microsoft.Maps.Directions.RouteOptimization.shortestDistance
-        });
-
-        // Add waypoints
-        const startWaypoint = new Microsoft.Maps.Directions.Waypoint({
-          location: new Microsoft.Maps.Location(origin.lat, origin.lng),
-          address: origin.address || ''
-        });
-        
-        const endWaypoint = new Microsoft.Maps.Directions.Waypoint({
-          location: new Microsoft.Maps.Location(destination.lat, destination.lng),
-          address: destination.address || ''
-        });
-
-        directionsManager.addWaypoint(startWaypoint);
-        directionsManager.addWaypoint(endWaypoint);
-
-        // Set event handlers
-        Microsoft.Maps.Events.addHandler(directionsManager, 'directionsUpdated', (e) => {
-          const route = e.route[0];
-          if (route) {
-            const routeId = this.drawRoute(
-              route.routePath.map(point => ({ lat: point.latitude, lng: point.longitude })),
-              options
-            );
-            resolve({ 
-              routeId, 
-              duration: route.duration, 
-              distance: route.distance 
+        // Load the Directions module if not already loaded
+        Microsoft.Maps.loadModule('Microsoft.Maps.Directions', () => {
+          try {
+            // Create a new DirectionsManager instance (CORRECT: must be instantiated, not called statically)
+            const directionsManager = new Microsoft.Maps.Directions.DirectionsManager(this.map);
+            
+            // Validate DirectionsManager was created successfully
+            if (!directionsManager) {
+              reject(new Error('Failed to create DirectionsManager instance'));
+              return;
+            }
+            
+            // Set route options
+            directionsManager.setRequestOptions({
+              routeMode: options.travelMode || Microsoft.Maps.Directions.RouteMode.driving,
+              routeOptimization: options.optimizeWaypoints ? 
+                Microsoft.Maps.Directions.RouteOptimization.shortestTime : 
+                Microsoft.Maps.Directions.RouteOptimization.shortestDistance
             });
-          } else {
-            reject('No route found');
+
+            // Add waypoints
+            const startWaypoint = new Microsoft.Maps.Directions.Waypoint({
+              location: new Microsoft.Maps.Location(origin.lat, origin.lng),
+              address: origin.address || ''
+            });
+            
+            const endWaypoint = new Microsoft.Maps.Directions.Waypoint({
+              location: new Microsoft.Maps.Location(destination.lat, destination.lng),
+              address: destination.address || ''
+            });
+
+            directionsManager.addWaypoint(startWaypoint);
+            directionsManager.addWaypoint(endWaypoint);
+
+            // Set event handlers
+            Microsoft.Maps.Events.addHandler(directionsManager, 'directionsUpdated', (e) => {
+              const route = e.route[0];
+              if (route) {
+                const routeId = this.drawRoute(
+                  route.routePath.map(point => ({ lat: point.latitude, lng: point.longitude })),
+                  options
+                );
+                resolve({ 
+                  routeId, 
+                  duration: route.duration, 
+                  distance: route.distance 
+                });
+              } else {
+                reject(new Error('No route found'));
+              }
+            });
+
+            Microsoft.Maps.Events.addHandler(directionsManager, 'directionsError', (e) => {
+              reject(new Error(`Directions failed: ${e.message || 'Unknown error'}`));
+            });
+
+            // CORRECT: Call calculateDirections() on the instantiated DirectionsManager
+            directionsManager.calculateDirections();
+          } catch (error) {
+            reject(new Error(`Directions failed: ${error.message || error}`));
           }
         });
-
-        Microsoft.Maps.Events.addHandler(directionsManager, 'directionsError', (e) => {
-          reject(`Directions failed: ${e.message || 'Unknown error'}`);
-        });
-
-        // Calculate directions
-        directionsManager.calculateDirections();
-        
       } catch (error) {
-        reject(`Directions failed: ${error.message || error}`);
+        reject(new Error(`Directions failed: ${error.message || error}`));
       }
     });
   }

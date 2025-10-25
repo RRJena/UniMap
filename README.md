@@ -542,7 +542,9 @@ Always check the browser console (F12) for error messages when troubleshooting i
 
 ### Latest Improvements
 
-- **Bing Maps Directions API Fix**: Fixed the `getDirections` method in BingMapsAdapter to properly use the DirectionsManager API instead of the incorrect static method call
+- **Bing Maps Directions API Fix**: Fixed the `getDirections` method in BingMapsAdapter to properly use the DirectionsManager API. The `DirectionsManager` class must be instantiated and requires the `calculateDirections()` method instead of a static method call
+- **Enhanced Input Validation**: Added comprehensive input validation to `getDirections`, `geocode`, and `reverseGeocode` methods in BingMapsAdapter
+- **Consistent Error Handling**: All error rejections now properly return Error objects for consistent error handling across all async methods
 - **Enhanced Geocoding**: Updated Bing Maps geocoding and reverse geocoding to use the modern SearchManager API
 - **New Providers**: Added support for Azure Maps, Here Maps, TomTom, Yandex Maps, and Carto
 - **Improved Error Handling**: Enhanced error handling across all adapters with better error messages and validation
