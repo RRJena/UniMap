@@ -3,10 +3,10 @@ import { throwIfMissing } from './utils/common.js';
 
 import { GoogleMapsAdapter } from './adapters/GoogleMapsAdapter.js';
 import { MapboxAdapter } from './adapters/MapboxAdapter.js';
+import { BingMapsAdapter } from './adapters/BingMapsAdapter.js';
 import { OSMAdapter } from './adapters/OSMAdapter.js';
-// Add other adapters here...
 
-export class MyMapLib {
+export class UniMap {
   constructor({ provider, apiKey, containerId, options = {} }) {
     if (!provider) throwIfMissing('provider');
     if (!containerId) throwIfMissing('containerId');
@@ -30,10 +30,12 @@ export class MyMapLib {
       case 'mapbox':
         this.adapter = new MapboxAdapter(this.apiKey, this.containerId, this.options);
         break;
-      case 'osm':
-        this.adapter = new OSMAdapter(this.containerId, this.options);
+      case 'bing':
+        this.adapter = new BingMapsAdapter(this.apiKey, this.containerId, this.options);
         break;
-      // Add cases for other providers...
+      case 'osm':
+        this.adapter = new OSMAdapter(this.apiKey, this.containerId, this.options);
+        break;
       default:
         throw new Error('Adapter not implemented for this provider');
     }
@@ -48,12 +50,24 @@ export class MyMapLib {
     return this.adapter.removeMarker(markerId);
   }
 
+  updateMarker(markerId, options) {
+    return this.adapter.updateMarker(markerId, options);
+  }
+
   setCenter(coords) {
     return this.adapter.setCenter(coords);
   }
 
   getCenter() {
     return this.adapter.getCenter();
+  }
+
+  setZoom(level) {
+    return this.adapter.setZoom(level);
+  }
+
+  getZoom() {
+    return this.adapter.getZoom();
   }
 
   zoomIn() {
@@ -68,6 +82,10 @@ export class MyMapLib {
     return this.adapter.panTo(coords);
   }
 
+  fitBounds(bounds) {
+    return this.adapter.fitBounds(bounds);
+  }
+
   geocode(address) {
     return this.adapter.geocode(address);
   }
@@ -76,12 +94,28 @@ export class MyMapLib {
     return this.adapter.reverseGeocode(lat, lng);
   }
 
-  drawRoute(coords) {
-    return this.adapter.drawRoute(coords);
+  drawRoute(coords, options = {}) {
+    return this.adapter.drawRoute(coords, options);
   }
 
-  drawPolygon(coords) {
-    return this.adapter.drawPolygon(coords);
+  getDirections(origin, destination, options = {}) {
+    return this.adapter.getDirections(origin, destination, options);
+  }
+
+  drawPolygon(coords, options = {}) {
+    return this.adapter.drawPolygon(coords, options);
+  }
+
+  drawPolyline(coords, options = {}) {
+    return this.adapter.drawPolyline(coords, options);
+  }
+
+  drawCircle(center, radius, options = {}) {
+    return this.adapter.drawCircle(center, radius, options);
+  }
+
+  drawRectangle(bounds, options = {}) {
+    return this.adapter.drawRectangle(bounds, options);
   }
 
   enableTrafficLayer() {
@@ -92,12 +126,24 @@ export class MyMapLib {
     return this.adapter.disableTrafficLayer();
   }
 
-  addHeatMap(points) {
-    return this.adapter.addHeatMap(points);
+  addHeatMap(points, options = {}) {
+    return this.adapter.addHeatMap(points, options);
   }
 
-  trackUserLocation(callback) {
-    return this.adapter.trackUserLocation(callback);
+  addTileLayer(url, options = {}) {
+    return this.adapter.addTileLayer(url, options);
+  }
+
+  removeLayer(layerId) {
+    return this.adapter.removeLayer(layerId);
+  }
+
+  trackUserLocation(callback, options = {}) {
+    return this.adapter.trackUserLocation(callback, options);
+  }
+
+  getUserLocation() {
+    return this.adapter.getUserLocation();
   }
 
   indoorMaps(enable) {
@@ -108,8 +154,32 @@ export class MyMapLib {
     return this.adapter.applyMapStyle(style);
   }
 
+  enable3D(enable) {
+    return this.adapter.enable3D(enable);
+  }
+
+  on(event, callback) {
+    return this.adapter.on(event, callback);
+  }
+
+  off(event, callback) {
+    return this.adapter.off(event, callback);
+  }
+
+  getBounds() {
+    return this.adapter.getBounds();
+  }
+
+  getContainer() {
+    return this.adapter.getContainer();
+  }
+
   destroy() {
     return this.adapter.destroy();
   }
 }
 
+if (typeof window !== 'undefined') {
+  window.UniMap = UniMap;
+}
+  

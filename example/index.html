@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniMap - Unified Mapping Library Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .control-group select,
+        .control-group input,
+        .control-group button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .control-group button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .control-group button:hover {
+            background-color: #0056b3;
+        }
+        
+        .control-group button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .map-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        #map {
+            width: 100%;
+            height: 600px;
+        }
+        
+        .examples {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        
+        .examples h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .example-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .example-buttons button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .example-buttons button:hover {
+            background-color: #218838;
+        }
+        
+        .status {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .troubleshooting {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        
+        .troubleshooting h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .troubleshooting ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .troubleshooting li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .api-key-help {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        
+        .api-key-help h4 {
+            margin-top: 0;
+            color: #0066cc;
+        }
+        
+        .api-key-help a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        
+        .api-key-help a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>UniMap - Unified Mapping Library</h1>
+            <p>Switch between different map providers without changing your code!</p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="provider">Map Provider:</label>
+                <select id="provider">
+                    <option value="google">Google Maps</option>
+                    <option value="mapbox">Mapbox</option>
+                    <option value="bing">Bing Maps</option>
+                    <option value="osm">OpenStreetMap</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="apiKey">API Key (required for Google, Mapbox, Bing):</label>
+                <input type="text" id="apiKey" placeholder="Enter your API key here" style="width: 300px;">
+                <div class="api-key-help">
+                    <h4>Need help with API keys?</h4>
+                    <ul>
+                        <li><strong>Google Maps:</strong> <a href="https://developers.google.com/maps/documentation/javascript/get-api-key" target="_blank">Get API Key</a> - Enable Maps JavaScript API, Geocoding API, and Directions API</li>
+                        <li><strong>Mapbox:</strong> <a href="https://account.mapbox.com/access-tokens/" target="_blank">Get Access Token</a> - Create a new token with public scope</li>
+                        <li><strong>Bing Maps:</strong> <a href="https://www.microsoft.com/en-us/maps/create-a-bing-maps-key" target="_blank">Get API Key</a> - Create a new key in Bing Maps Dev Center</li>
+                        <li><strong>OpenStreetMap:</strong> No API key required - completely free!</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="center">Center Coordinates:</label>
+                <input type="text" id="centerLat" placeholder="Latitude" style="width: 120px;" value="40.7128">
+                <input type="text" id="centerLng" placeholder="Longitude" style="width: 120px;" value="-74.0060">
+            </div>
+            
+            <div class="control-group">
+                <label for="zoom">Zoom Level:</label>
+                <input type="number" id="zoom" min="1" max="20" value="12" style="width: 80px;">
+            </div>
+            
+            <div class="control-group">
+                <button id="initMap">Initialize Map</button>
+                <button id="destroyMap">Destroy Map</button>
+                <button id="switchProvider">Switch Provider</button>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+        
+        <div class="examples">
+            <h3>Map Examples</h3>
+            <div class="example-buttons">
+                <button id="addMarker">Add Marker</button>
+                <button id="addMultipleMarkers">Add Multiple Markers</button>
+                <button id="drawRoute">Draw Route</button>
+                <button id="drawPolygon">Draw Polygon</button>
+                <button id="drawCircle">Draw Circle</button>
+                <button id="addHeatmap">Add Heatmap</button>
+                <button id="enableTraffic">Enable Traffic</button>
+                <button id="getUserLocation">Get User Location</button>
+                <button id="geocodeAddress">Geocode Address</button>
+                <button id="clearMap">Clear Map</button>
+            </div>
+            
+            <div class="status" id="status">Ready to initialize map...</div>
+        </div>
+        
+        <div class="troubleshooting">
+            <h3>🔧 Troubleshooting Common Issues</h3>
+            
+            <h4>Google Maps Issues:</h4>
+            <ul>
+                <li><strong>"Oops! Something went wrong"</strong> - Check your API key and ensure it's enabled for Maps JavaScript API</li>
+                <li><strong>"REQUEST_DENIED"</strong> - Verify API key is correct and has proper permissions</li>
+                <li><strong>"OVER_QUERY_LIMIT"</strong> - Your API key has exceeded its quota</li>
+                <li><strong>Billing not enabled</strong> - Google Maps requires billing to be set up</li>
+                <li><strong>Domain restrictions</strong> - Check if your domain is allowed in API key settings</li>
+            </ul>
+            
+            <h4>Mapbox Issues:</h4>
+            <ul>
+                <li><strong>"Invalid access token"</strong> - Verify your access token is correct</li>
+                <li><strong>Token scope</strong> - Ensure token has public scope for web applications</li>
+            </ul>
+            
+            <h4>Bing Maps Issues:</h4>
+            <ul>
+                <li><strong>"Invalid credentials"</strong> - Check your Bing Maps API key</li>
+                <li><strong>Service not available</strong> - Verify the service is enabled in your account</li>
+            </ul>
+            
+            <h4>General Tips:</h4>
+            <ul>
+                <li>Open browser console (F12) to see detailed error messages</li>
+                <li>Check network tab for failed API requests</li>
+                <li>Verify your API key has the correct permissions enabled</li>
+                <li>Try OpenStreetMap first (no API key required) to test the library</li>
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        import { UniMap } from '../unimap.js';
+        
+        let map = null;
+        let currentProvider = 'google';
+        let markers = [];
+        let shapes = [];
+        
+        // DOM elements
+        const providerSelect = document.getElementById('provider');
+        const apiKeyInput = document.getElementById('apiKey');
+        const centerLatInput = document.getElementById('centerLat');
+        const centerLngInput = document.getElementById('centerLng');
+        const zoomInput = document.getElementById('zoom');
+        const initButton = document.getElementById('initMap');
+        const destroyButton = document.getElementById('destroyMap');
+        const switchButton = document.getElementById('switchProvider');
+        const statusDiv = document.getElementById('status');
+        
+        // Example buttons
+        const addMarkerBtn = document.getElementById('addMarker');
+        const addMultipleMarkersBtn = document.getElementById('addMultipleMarkers');
+        const drawRouteBtn = document.getElementById('drawRoute');
+        const drawPolygonBtn = document.getElementById('drawPolygon');
+        const drawCircleBtn = document.getElementById('drawCircle');
+        const addHeatmapBtn = document.getElementById('addHeatmap');
+        const enableTrafficBtn = document.getElementById('enableTraffic');
+        const getUserLocationBtn = document.getElementById('getUserLocation');
+        const geocodeAddressBtn = document.getElementById('geocodeAddress');
+        const clearMapBtn = document.getElementById('clearMap');
+        
+        // Event listeners
+        initButton.addEventListener('click', initializeMap);
+        destroyButton.addEventListener('click', destroyMap);
+        switchButton.addEventListener('click', switchProvider);
+        
+        addMarkerBtn.addEventListener('click', addMarker);
+        addMultipleMarkersBtn.addEventListener('click', addMultipleMarkers);
+        drawRouteBtn.addEventListener('click', drawRoute);
+        drawPolygonBtn.addEventListener('click', drawPolygon);
+        drawCircleBtn.addEventListener('click', drawCircle);
+        addHeatmapBtn.addEventListener('click', addHeatmap);
+        enableTrafficBtn.addEventListener('click', enableTraffic);
+        getUserLocationBtn.addEventListener('click', getUserLocation);
+        geocodeAddressBtn.addEventListener('click', geocodeAddress);
+        clearMapBtn.addEventListener('click', clearMap);
+        
+        // Provider change handler
+        providerSelect.addEventListener('change', (e) => {
+            currentProvider = e.target.value;
+            updateApiKeyPlaceholder();
+        });
+        
+        function updateApiKeyPlaceholder() {
+            switch (currentProvider) {
+                case 'osm':
+                    apiKeyInput.placeholder = 'No API key required for OpenStreetMap';
+                    apiKeyInput.value = '';
+                    break;
+                case 'google':
+                    apiKeyInput.placeholder = 'Enter your Google Maps API key';
+                    break;
+                case 'mapbox':
+                    apiKeyInput.placeholder = 'Enter your Mapbox access token';
+                    break;
+                case 'bing':
+                    apiKeyInput.placeholder = 'Enter your Bing Maps API key';
+                    break;
+            }
+        }
+        
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            
+            // Log to console for debugging
+            if (type === 'error') {
+                console.error(message);
+            } else if (type === 'warning') {
+                console.warn(message);
+            } else {
+                console.log(message);
+            }
+        }
+        
+        async function initializeMap() {
+            try {
+                const provider = providerSelect.value;
+                const apiKey = apiKeyInput.value;
+                const center = {
+                    lat: parseFloat(centerLatInput.value),
+                    lng: parseFloat(centerLngInput.value)
+                };
+                const zoom = parseInt(zoomInput.value);
+                
+                if ((provider !== 'osm') && !apiKey) {
+                    updateStatus('API key is required for this provider', 'error');
+                    return;
+                }
+                
+                updateStatus(`Initializing ${provider} map...`, 'info');
+                
+                map = new UniMap({
+                    provider: provider,
+                    apiKey: apiKey,
+                    containerId: 'map',
+                    options: {
+                        center: center,
+                        zoom: zoom
+                    }
+                });
+                
+                await map.init();
+                
+                updateStatus(`${provider} map initialized successfully!`, 'success');
+                enableExampleButtons();
+                
+                // Add some event listeners
+                map.on('click', (e) => {
+                    console.log('Map clicked:', e);
+                });
+                
+            } catch (error) {
+                console.error('Map initialization error:', error);
+                
+                // Provide helpful error messages
+                let errorMessage = error.message;
+                if (error.message.includes('API key')) {
+                    errorMessage += ' - Please check your API key and ensure it has the correct permissions enabled.';
+                } else if (error.message.includes('Google Maps')) {
+                    errorMessage += ' - Check the troubleshooting section below for common Google Maps issues.';
+                } else if (error.message.includes('Mapbox')) {
+                    errorMessage += ' - Verify your access token has public scope.';
+                } else if (error.message.includes('Bing Maps')) {
+                    errorMessage += ' - Check your Bing Maps API key and service status.';
+                }
+                
+                updateStatus(`Error initializing map: ${errorMessage}`, 'error');
+            }
+        }
+        
+        function destroyMap() {
+            if (map) {
+                map.destroy();
+                map = null;
+                updateStatus('Map destroyed', 'info');
+                disableExampleButtons();
+            }
+        }
+        
+        function switchProvider() {
+            if (map) {
+                destroyMap();
+                setTimeout(() => {
+                    initializeMap();
+                }, 100);
+            }
+        }
+        
+        function enableExampleButtons() {
+            const buttons = [
+                addMarkerBtn, addMultipleMarkersBtn, drawRouteBtn, drawPolygonBtn,
+                drawCircleBtn, addHeatmapBtn, enableTrafficBtn, getUserLocationBtn,
+                geocodeAddressBtn, clearMapBtn
+            ];
+            buttons.forEach(btn => btn.disabled = false);
+        }
+        
+        function disableExampleButtons() {
+            const buttons = [
+                addMarkerBtn, addMultipleMarkersBtn, drawRouteBtn, drawPolygonBtn,
+                drawCircleBtn, addHeatmapBtn, enableTrafficBtn, getUserLocationBtn,
+                geocodeAddressBtn, clearMapBtn
+            ];
+            buttons.forEach(btn => btn.disabled = true);
+        }
+        
+        // Example functions
+        function addMarker() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const markerId = map.addMarker({
+                    lat: center.lat + (Math.random() - 0.5) * 0.01,
+                    lng: center.lng + (Math.random() - 0.5) * 0.01,
+                    title: 'Random Marker',
+                    label: '📍'
+                });
+                
+                markers.push(markerId);
+                updateStatus(`Marker added with ID: ${markerId}`, 'success');
+            } catch (error) {
+                updateStatus(`Error adding marker: ${error.message}`, 'error');
+            }
+        }
+        
+        function addMultipleMarkers() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const count = 5;
+                
+                for (let i = 0; i < count; i++) {
+                    const markerId = map.addMarker({
+                        lat: center.lat + (Math.random() - 0.5) * 0.02,
+                        lng: center.lng + (Math.random() - 0.5) * 0.02,
+                        title: `Marker ${i + 1}`,
+                        label: `${i + 1}`
+                    });
+                    markers.push(markerId);
+                }
+                
+                updateStatus(`${count} markers added`, 'success');
+            } catch (error) {
+                updateStatus(`Error adding markers: ${error.message}`, 'error');
+            }
+        }
+        
+        function drawRoute() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const coords = [
+                    { lat: center.lat - 0.01, lng: center.lng - 0.01 },
+                    { lat: center.lat, lng: center.lng },
+                    { lat: center.lat + 0.01, lng: center.lng + 0.01 }
+                ];
+                
+                const routeId = map.drawRoute(coords, {
+                    strokeColor: '#FF0000',
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8
+                });
+                
+                shapes.push(routeId);
+                updateStatus(`Route drawn with ID: ${routeId}`, 'success');
+            } catch (error) {
+                updateStatus(`Error drawing route: ${error.message}`, 'error');
+            }
+        }
+        
+        function drawPolygon() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const coords = [
+                    { lat: center.lat - 0.01, lng: center.lng - 0.01 },
+                    { lat: center.lat - 0.01, lng: center.lng + 0.01 },
+                    { lat: center.lat + 0.01, lng: center.lng + 0.01 },
+                    { lat: center.lat + 0.01, lng: center.lng - 0.01 }
+                ];
+                
+                const polygonId = map.drawPolygon(coords, {
+                    fillColor: '#00FF00',
+                    fillOpacity: 0.3,
+                    strokeColor: '#008000',
+                    strokeWeight: 2
+                });
+                
+                shapes.push(polygonId);
+                updateStatus(`Polygon drawn with ID: ${polygonId}`, 'success');
+            } catch (error) {
+                updateStatus(`Error drawing polygon: ${error.message}`, 'error');
+            }
+        }
+        
+        function drawCircle() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const radius = 1000; // meters
+                
+                const circleId = map.drawCircle(center, radius, {
+                    fillColor: '#0000FF',
+                    fillOpacity: 0.2,
+                    strokeColor: '#000080',
+                    strokeWeight: 3
+                });
+                
+                shapes.push(circleId);
+                updateStatus(`Circle drawn with ID: ${circleId}`, 'success');
+            } catch (error) {
+                updateStatus(`Error drawing circle: ${error.message}`, 'error');
+            }
+        }
+        
+        function addHeatmap() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const points = [];
+                
+                // Generate random points around center
+                for (let i = 0; i < 50; i++) {
+                    points.push({
+                        lat: center.lat + (Math.random() - 0.5) * 0.02,
+                        lng: center.lng + (Math.random() - 0.5) * 0.02,
+                        weight: Math.random()
+                    });
+                }
+                
+                const heatmapId = map.addHeatMap(points, {
+                    radius: 25,
+                    opacity: 0.7
+                });
+                
+                shapes.push(heatmapId);
+                updateStatus(`Heatmap added with ID: ${heatmapId}`, 'success');
+            } catch (error) {
+                updateStatus(`Error adding heatmap: ${error.message}`, 'error');
+            }
+        }
+        
+        function enableTraffic() {
+            if (!map) return;
+            
+            try {
+                map.enableTrafficLayer();
+                updateStatus('Traffic layer enabled', 'success');
+            } catch (error) {
+                updateStatus(`Traffic not available: ${error.message}`, 'warning');
+            }
+        }
+        
+        async function getUserLocation() {
+            if (!map) return;
+            
+            try {
+                updateStatus('Getting user location...', 'info');
+                const location = await map.getUserLocation();
+                updateStatus(`Location: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`, 'success');
+                
+                // Center map on user location
+                map.setCenter(location);
+                map.setZoom(15);
+                
+                // Add a marker for user location
+                const markerId = map.addMarker({
+                    lat: location.lat,
+                    lng: location.lng,
+                    title: 'Your Location',
+                    label: '📍',
+                    color: '#00FF00'
+                });
+                
+                markers.push(markerId);
+                
+            } catch (error) {
+                updateStatus(`Error getting location: ${error.message}`, 'error');
+            }
+        }
+        
+        async function geocodeAddress() {
+            if (!map) return;
+            
+            const address = prompt('Enter an address to geocode:');
+            if (!address) return;
+            
+            try {
+                updateStatus(`Geocoding: ${address}`, 'info');
+                const result = await map.geocode(address);
+                updateStatus(`Found: ${result.formattedAddress}`, 'success');
+                
+                // Center map on geocoded location
+                map.setCenter(result);
+                map.setZoom(15);
+                
+                // Add a marker
+                const markerId = map.addMarker({
+                    lat: result.lat,
+                    lng: result.lng,
+                    title: address,
+                    label: '📍',
+                    color: '#FF0000'
+                });
+                
+                markers.push(markerId);
+                
+            } catch (error) {
+                updateStatus(`Geocoding error: ${error.message}`, 'error');
+            }
+        }
+        
+        function clearMap() {
+            if (!map) return;
+            
+            try {
+                // Remove all markers
+                markers.forEach(markerId => {
+                    map.removeMarker(markerId);
+                });
+                markers = [];
+                
+                // Remove all shapes
+                shapes.forEach(shapeId => {
+                    map.removeLayer(shapeId);
+                });
+                shapes = [];
+                
+                updateStatus('Map cleared', 'success');
+            } catch (error) {
+                updateStatus(`Error clearing map: ${error.message}`, 'error');
+            }
+        }
+        
+        // Initialize
+        updateApiKeyPlaceholder();
+        disableExampleButtons();
+    </script>
+</body>
+</html>
