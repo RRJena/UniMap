@@ -160,12 +160,17 @@ map.on('bounds_changed', callback);
 
 ## Supported Providers
 
-| Provider | API Key Required | Geocoding | Routing | 3D View |
-|----------|-----------------|-----------|---------|---------|
-| Google Maps | ✅ | ✅ | ✅ | ✅ |
-| Mapbox | ✅ | ✅ | ✅ | ✅ |
-| Bing Maps | ✅ | ✅ | ✅ | Partial |
-| OpenStreetMap | ❌ | ✅ | ✅ | ❌ |
+| Provider | API Key Required | Geocoding | Routing | 3D View | Status |
+|----------|-----------------|-----------|---------|---------|---------|
+| Google Maps | ✅ | ✅ | ✅ | ✅ | ✅ Stable |
+| Mapbox | ✅ | ✅ | ✅ | ✅ | ✅ Stable |
+| Bing Maps | ✅ | ✅ | ✅ | Partial | ✅ Stable |
+| OpenStreetMap | ❌ | ✅ | ✅ | ❌ | ✅ Stable |
+| Azure Maps | ✅ | ✅ | ✅ | ✅ | ✅ Stable |
+| Here Maps | ✅ | ✅ | ✅ | ✅ | ✅ Stable |
+| TomTom | ✅ | ✅ | ✅ | ✅ | ✅ Stable |
+| Yandex Maps | ✅ | ✅ | ✅ | Partial | ✅ Stable |
+| Carto | ✅ | ✅ | ✅ | ❌ | ✅ Stable |
 
 ---
 
@@ -331,8 +336,13 @@ Provider-specific implementations.
 - `BaseAdapter.js` - Abstract base class for all adapters
 - `GoogleMapsAdapter.js` - Google Maps implementation
 - `MapboxAdapter.js` - Mapbox implementation
-- `BingMapsAdapter.js` - Bing Maps implementation
+- `BingMapsAdapter.js` - Bing Maps implementation (recently updated with proper Directions API usage)
 - `OSMAdapter.js` - OpenStreetMap implementation
+- `AzureMapsAdapter.js` - Azure Maps implementation
+- `HereMapsAdapter.js` - Here Maps implementation
+- `TomTomAdapter.js` - TomTom implementation
+- `YandexMapsAdapter.js` - Yandex Maps implementation
+- `CartoAdapter.js` - Carto implementation
 
 ### Utilities: `utils/`
 
@@ -374,10 +384,27 @@ Before running the application, you need to set up your API keys:
      google: {
        apiKey: 'your_actual_google_maps_api_key'
      },
+     mapbox: {
+       apiKey: 'your_actual_mapbox_api_key'
+     },
      bing: {
        apiKey: 'your_actual_bing_maps_api_key'
+     },
+     azure: {
+       apiKey: 'your_actual_azure_maps_api_key'
+     },
+     here: {
+       apiKey: 'your_actual_here_maps_api_key'
+     },
+     tomtom: {
+       apiKey: 'your_actual_tomtom_api_key'
+     },
+     yandex: {
+       apiKey: 'your_actual_yandex_maps_api_key'
+     },
+     carto: {
+       apiKey: 'your_actual_carto_api_key'
      }
-     // ... other providers
    };
    ```
 
@@ -385,6 +412,11 @@ Before running the application, you need to set up your API keys:
    - [Google Maps](https://developers.google.com/maps/documentation/javascript/get-api-key)
    - [Mapbox](https://account.mapbox.com/access-tokens/)
    - [Bing Maps](https://www.microsoft.com/en-us/maps/create-a-bing-maps-key)
+   - [Azure Maps](https://docs.microsoft.com/en-us/azure/azure-maps/how-to-manage-account-keys)
+   - [Here Maps](https://developer.here.com/documentation/authentication/dev_guide/topics/api-key-credentials.html)
+   - [TomTom](https://developer.tomtom.com/user/me/apps)
+   - [Yandex Maps](https://yandex.com/dev/maps/jsapi/doc/2.1/quick-start/tutorial.html)
+   - [Carto](https://carto.com/developers/)
 
 4. **Important**: Never commit `config.js` to version control as it contains sensitive API keys.
 
@@ -458,6 +490,21 @@ provider: 'bing'
 
 // OpenStreetMap (no API key needed)
 provider: 'osm'
+
+// Azure Maps (requires API key)
+provider: 'azure'
+
+// Here Maps (requires API key)
+provider: 'here'
+
+// TomTom (requires API key)
+provider: 'tomtom'
+
+// Yandex Maps (requires API key)
+provider: 'yandex'
+
+// Carto (requires API key)
+provider: 'carto'
 ```
 
 ### Direct File Opening
@@ -488,6 +535,22 @@ Always check the browser console (F12) for error messages when troubleshooting i
 2. **Refresh the browser** to see changes
 3. **Check console** for any errors
 4. **Test different providers** to ensure compatibility
+
+---
+
+## Recent Updates
+
+### Latest Improvements
+
+- **Bing Maps Directions API Fix**: Fixed the `getDirections` method in BingMapsAdapter to properly use the DirectionsManager API instead of the incorrect static method call
+- **Enhanced Geocoding**: Updated Bing Maps geocoding and reverse geocoding to use the modern SearchManager API
+- **New Providers**: Added support for Azure Maps, Here Maps, TomTom, Yandex Maps, and Carto
+- **Improved Error Handling**: Enhanced error handling across all adapters with better error messages and validation
+- **Configuration System**: Streamlined configuration with `config.example.js` template for easy setup
+
+### Breaking Changes
+
+None in this version. All changes are backward compatible.
 
 ---
 
