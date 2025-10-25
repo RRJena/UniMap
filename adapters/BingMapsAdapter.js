@@ -15,12 +15,13 @@ export class BingMapsAdapter extends BaseAdapter {
       throw new Error(`Container element with ID '${this.containerId}' not found.`);
     }
 
+    // Validate center coordinates
+    const centerLat = typeof this.options.center?.lat === 'number' ? this.options.center.lat : 0;
+    const centerLng = typeof this.options.center?.lng === 'number' ? this.options.center.lng : 0;
+
     this.map = new Microsoft.Maps.Map(mapElement, {
       credentials: this.apiKey,
-      center: new Microsoft.Maps.Location(
-        this.options.center?.lat || 0,
-        this.options.center?.lng || 0
-      ),
+      center: new Microsoft.Maps.Location(centerLat, centerLng),
       zoom: this.options.zoom || 10,
       mapTypeId: this.options.mapTypeId || Microsoft.Maps.MapTypeId.road,
       showMapTypeSelector: this.options.showMapTypeSelector !== false,
@@ -29,23 +30,34 @@ export class BingMapsAdapter extends BaseAdapter {
       showBreadcrumb: this.options.showBreadcrumb !== false,
       enableCORS: this.options.enableCORS !== false,
       enableHighDpi: this.options.enableHighDpi !== false,
-      enableInertia: this.options.enableInertia !== false,
-      ...this.options
+      enableInertia: this.options.enableInertia !== false
     });
   }
 
   loadBingMapsScript() {
     return new Promise((resolve, reject) => {
-      if (window.Microsoft && window.Microsoft.Maps) {
+      if (window.Microsoft && window.Microsoft.Maps && window.Microsoft.Maps.Location) {
         return resolve();
       }
 
+      // Wait for the callback to fire
+      const callbackName = 'bingMapsLoadCallback';
+      window[callbackName] = () => {
+        if (window.Microsoft && window.Microsoft.Maps && window.Microsoft.Maps.Location) {
+          resolve();
+        } else {
+          reject(new Error('Bing Maps failed to load properly'));
+        }
+        delete window[callbackName];
+      };
+
       const script = document.createElement('script');
-      script.src = `https://www.bing.com/api/maps/mapcontrol?key=${this.apiKey}`;
+      script.src = `https://www.bing.com/api/maps/mapcontrol?key=${this.apiKey}&callback=${callbackName}`;
       script.async = true;
-      script.defer = true;
-      script.onload = resolve;
-      script.onerror = reject;
+      script.onerror = () => {
+        delete window[callbackName];
+        reject(new Error('Failed to load Bing Maps script'));
+      };
 
       document.head.appendChild(script);
     });
@@ -55,14 +67,24 @@ export class BingMapsAdapter extends BaseAdapter {
     const markerId = this._generateId();
     
     const location = new Microsoft.Maps.Location(options.lat, options.lng);
-    const pushpin = new Microsoft.Maps.Pushpin(location, {
+    
+    const pushpinOptions = {
       title: options.title || '',
       text: options.label || '',
-      icon: options.icon || null,
-      color: options.color || Microsoft.Maps.PushpinColor.red,
       draggable: options.draggable || false
-    });
-
+    };
+    
+    if (options.icon) {
+      pushpinOptions.icon = options.icon;
+    }
+    
+    if (options.color !== undefined) {
+      pushpinOptions.color = options.color;
+    } else if (Microsoft.Maps.PushpinColor && Microsoft.Maps.PushpinColor.red) {
+      pushpinOptions.color = Microsoft.Maps.PushpinColor.red;
+    }
+    
+    const pushpin = new Microsoft.Maps.Pushpin(location, pushpinOptions);
     this.map.entities.push(pushpin);
     this.markers.set(markerId, pushpin);
     
@@ -147,32 +169,57 @@ export class BingMapsAdapter extends BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
-      // Load the Search module if not already loaded
-      Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
-        // Create SearchManager instance
-        const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
-        
-        const geocodeRequest = {
-          where: address,
-          callback: (geocodeResult) => {
-            if (geocodeResult && geocodeResult.results && geocodeResult.results.length > 0) {
-              const location = geocodeResult.results[0].location;
-              resolve({
-                lat: location.latitude,
-                lng: location.longitude,
-                formattedAddress: geocodeResult.results[0].address.formattedAddress
-              });
-            } else {
-              reject(new Error('No results found'));
-            }
-          },
-          errorCallback: (error) => {
-            reject(new Error(`Geocoding failed: ${error}`));
+      const timeout = setTimeout(() => {
+        reject(new Error('Geocoding request timeout'));
+      }, 30000);
+
+      try {
+        // Load the Search module if not already loaded
+        Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
+          try {
+            // Create SearchManager instance
+            const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
+            
+            const geocodeRequest = {
+              where: address,
+              callback: (geocodeResult) => {
+                clearTimeout(timeout);
+                try {
+                  if (geocodeResult && geocodeResult.results && geocodeResult.results.length > 0) {
+                    const location = geocodeResult.results[0].location;
+                    resolve({
+                      lat: location.latitude,
+                      lng: location.longitude,
+                      formattedAddress: geocodeResult.results[0].address.formattedAddress
+                    });
+                  } else {
+                    reject(new Error('No results found'));
+                  }
+                } catch (err) {
+                  reject(new Error(`Geocoding callback error: ${err.message}`));
+                }
+              },
+              errorCallback: (error) => {
+                clearTimeout(timeout);
+                const errorMsg = error && error.message ? error.message : 
+                               (typeof error === 'string' ? error : JSON.stringify(error));
+                reject(new Error(`Geocoding failed: ${errorMsg}`));
+              }
+            };
+            
+            searchManager.geocode(geocodeRequest);
+          } catch (err) {
+            clearTimeout(timeout);
+            reject(new Error(`Geocoding setup error: ${err.message}`));
           }
-        };
-        
-        searchManager.geocode(geocodeRequest);
-      });
+        }, (errorCallback) => {
+          clearTimeout(timeout);
+          reject(new Error(`Failed to load Bing Maps Search module: ${errorCallback}`));
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        reject(new Error(`Geocoding initialization error: ${err.message}`));
+      }
     });
   }
 
@@ -182,32 +229,57 @@ export class BingMapsAdapter extends BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
-      // Load the Search module if not already loaded
-      Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
-        // Create SearchManager instance
-        const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
-        
-        const location = new Microsoft.Maps.Location(lat, lng);
-        
-        const reverseGeocodeRequest = {
-          location: location,
-          callback: (reverseGeocodeResult) => {
-            if (reverseGeocodeResult && reverseGeocodeResult.address) {
-              resolve({
-                formattedAddress: reverseGeocodeResult.address.formattedAddress,
-                components: reverseGeocodeResult.address
-              });
-            } else {
-              reject(new Error('No results found'));
-            }
-          },
-          errorCallback: (error) => {
-            reject(new Error(`Reverse geocoding failed: ${error}`));
+      const timeout = setTimeout(() => {
+        reject(new Error('Reverse geocoding request timeout'));
+      }, 30000);
+
+      try {
+        // Load the Search module if not already loaded
+        Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
+          try {
+            // Create SearchManager instance
+            const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
+            
+            const location = new Microsoft.Maps.Location(lat, lng);
+            
+            const reverseGeocodeRequest = {
+              location: location,
+              callback: (reverseGeocodeResult) => {
+                clearTimeout(timeout);
+                try {
+                  if (reverseGeocodeResult && reverseGeocodeResult.address) {
+                    resolve({
+                      formattedAddress: reverseGeocodeResult.address.formattedAddress,
+                      components: reverseGeocodeResult.address
+                    });
+                  } else {
+                    reject(new Error('No results found'));
+                  }
+                } catch (err) {
+                  reject(new Error(`Reverse geocoding callback error: ${err.message}`));
+                }
+              },
+              errorCallback: (error) => {
+                clearTimeout(timeout);
+                const errorMsg = error && error.message ? error.message : 
+                               (typeof error === 'string' ? error : JSON.stringify(error));
+                reject(new Error(`Reverse geocoding failed: ${errorMsg}`));
+              }
+            };
+            
+            searchManager.reverseGeocode(reverseGeocodeRequest);
+          } catch (err) {
+            clearTimeout(timeout);
+            reject(new Error(`Reverse geocoding setup error: ${err.message}`));
           }
-        };
-        
-        searchManager.reverseGeocode(reverseGeocodeRequest);
-      });
+        }, (errorCallback) => {
+          clearTimeout(timeout);
+          reject(new Error(`Failed to load Bing Maps Search module: ${errorCallback}`));
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        reject(new Error(`Reverse geocoding initialization error: ${err.message}`));
+      }
     });
   }
 
@@ -241,6 +313,10 @@ export class BingMapsAdapter extends BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Directions request timeout'));
+      }, 30000); // 30 second timeout
+
       try {
         // Load the Directions module if not already loaded
         Microsoft.Maps.loadModule('Microsoft.Maps.Directions', () => {
@@ -250,6 +326,7 @@ export class BingMapsAdapter extends BaseAdapter {
             
             // Validate DirectionsManager was created successfully
             if (!directionsManager) {
+              clearTimeout(timeout);
               reject(new Error('Failed to create DirectionsManager instance'));
               return;
             }
@@ -278,33 +355,49 @@ export class BingMapsAdapter extends BaseAdapter {
 
             // Set event handlers
             Microsoft.Maps.Events.addHandler(directionsManager, 'directionsUpdated', (e) => {
-              const route = e.route[0];
-              if (route) {
-                const routeId = this.drawRoute(
-                  route.routePath.map(point => ({ lat: point.latitude, lng: point.longitude })),
-                  options
-                );
-                resolve({ 
-                  routeId, 
-                  duration: route.duration, 
-                  distance: route.distance 
-                });
-              } else {
-                reject(new Error('No route found'));
+              clearTimeout(timeout);
+              try {
+                if (e && e.route && e.route.length > 0) {
+                  const route = e.route[0];
+                  if (route && route.routePath && route.routePath.length > 0) {
+                    const routeId = this.drawRoute(
+                      route.routePath.map(point => ({ lat: point.latitude, lng: point.longitude })),
+                      options
+                    );
+                    resolve({ 
+                      routeId, 
+                      duration: route.duration, 
+                      distance: route.distance 
+                    });
+                  } else {
+                    reject(new Error('No route found: route path is empty'));
+                  }
+                } else {
+                  reject(new Error('No route found'));
+                }
+              } catch (err) {
+                reject(new Error(`Directions callback error: ${err.message}`));
               }
             });
 
             Microsoft.Maps.Events.addHandler(directionsManager, 'directionsError', (e) => {
-              reject(new Error(`Directions failed: ${e.message || 'Unknown error'}`));
+              clearTimeout(timeout);
+              const errorMsg = e && e.message ? e.message : 'Unknown error';
+              reject(new Error(`Directions failed: ${errorMsg}`));
             });
 
             // CORRECT: Call calculateDirections() on the instantiated DirectionsManager
             directionsManager.calculateDirections();
           } catch (error) {
-            reject(new Error(`Directions failed: ${error.message || error}`));
+            clearTimeout(timeout);
+            reject(new Error(`Directions setup failed: ${error.message || error}`));
           }
+        }, (errorCallback) => {
+          clearTimeout(timeout);
+          reject(new Error(`Failed to load Bing Maps Directions module: ${errorCallback}`));
         });
       } catch (error) {
+        clearTimeout(timeout);
         reject(new Error(`Directions failed: ${error.message || error}`));
       }
     });
@@ -335,18 +428,28 @@ export class BingMapsAdapter extends BaseAdapter {
   }
 
   drawCircle(center, radius, options = {}) {
+    // Bing Maps doesn't have a built-in Circle, approximate with a polygon
     const circleId = this._generateId();
     
-    const location = new Microsoft.Maps.Location(center.lat, center.lng);
-    const circle = new Microsoft.Maps.Circle(location, radius, {
+    const numPoints = 64;
+    const points = [];
+    
+    for (let i = 0; i < numPoints; i++) {
+      const angle = (i / numPoints) * 2 * Math.PI;
+      const lat = center.lat + (radius / 111320) * Math.cos(angle);
+      const lng = center.lng + (radius / (111320 * Math.cos(center.lat * Math.PI / 180))) * Math.sin(angle);
+      points.push(new Microsoft.Maps.Location(lat, lng));
+    }
+    
+    const polygon = new Microsoft.Maps.Polygon(points, {
       fillColor: options.fillColor || '#FF0000',
       fillOpacity: options.fillOpacity || 0.35,
       strokeColor: options.strokeColor || '#FF0000',
       strokeThickness: options.strokeWeight || 2
     });
 
-    this.map.entities.push(circle);
-    this.polygons.set(circleId, circle);
+    this.map.entities.push(polygon);
+    this.polygons.set(circleId, polygon);
     
     return circleId;
   }
@@ -389,20 +492,21 @@ export class BingMapsAdapter extends BaseAdapter {
   }
 
   addHeatMap(points, options = {}) {
+    // Bing Maps doesn't have a built-in HeatMapLayer, use colored circles
     const heatmapId = this._generateId();
+    const group = [];
     
-    const locations = points.map(point => 
-      new Microsoft.Maps.Location(point.lat, point.lng)
-    );
-
-    const heatmap = new Microsoft.Maps.HeatMapLayer(locations, {
-      intensity: options.intensity || 1,
-      radius: options.radius || 20,
-      opacity: options.opacity || 0.6
+    points.forEach(point => {
+      const location = new Microsoft.Maps.Location(point.lat, point.lng);
+      const pushpin = new Microsoft.Maps.Pushpin(location, {
+        color: point.color || '#FF0000',
+        opacity: options.opacity || 0.6
+      });
+      this.map.entities.push(pushpin);
+      group.push(pushpin);
     });
 
-    this.map.layers.insert(heatmap);
-    this.heatmaps.set(heatmapId, heatmap);
+    this.heatmaps.set(heatmapId, group);
     
     return heatmapId;
   }

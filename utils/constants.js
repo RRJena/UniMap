@@ -7,7 +7,8 @@ export const SUPPORTED_PROVIDERS = [
     'bing',
     'yandex',
     'carto',
-    'azure'
+    'azure',
+    'mapmyindia'
   ];
   
   export const DEFAULT_MAP_OPTIONS = {

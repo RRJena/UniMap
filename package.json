@@ -1,15 +1,18 @@
 {
   "name": "unimap",
-  "version": "2.0.0",
+  "version": "2.2.10",
   "description": "Unified mapping library for multiple map service providers - Google Maps, Mapbox, Bing Maps, OpenStreetMap, and more",
   "main": "unimap.js",
+  "browser": "build/unimap.mini.js",
   "type": "module",
   "scripts": {
-    "build": "echo 'No build step required - ES6 modules ready'",
+    "build": "node build.js",
+    "build:mini": "node build.js --minify",
     "test": "echo 'Tests coming soon'",
-    "dev": "echo 'Open example/index.html in a browser'",
+    "dev": "echo 'Open example/index.html or examples/test-all-providers.html in a browser'",
     "lint": "echo 'Linting coming soon'",
-    "format": "echo 'Formatting coming soon'"
+    "format": "echo 'Formatting coming soon'",
+    "prepublishOnly": "npm run build:mini"
   },
   "keywords": [
     "maps",
@@ -29,16 +32,16 @@
     "es6",
     "typescript"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "UniMap Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/unimap.git"
+    "url": "https://github.com/unimap/unimap.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/unimap/issues"
+    "url": "https://github.com/unimap/unimap/issues"
   },
-  "homepage": "https://github.com/yourusername/unimap#readme",
+  "homepage": "https://github.com/unimap/unimap#readme",
   "engines": {
     "node": ">=14.0.0"
   },
@@ -49,13 +52,17 @@
   ],
   "files": [
     "unimap.js",
+    "build/",
     "adapters/",
     "utils/",
     "example/",
+    "examples/",
     "README.md",
     "LICENSE"
   ],
-  "devDependencies": {},
+  "devDependencies": {
+    "esbuild": "^0.25.11"
+  },
   "peerDependencies": {},
   "dependencies": {}
 }

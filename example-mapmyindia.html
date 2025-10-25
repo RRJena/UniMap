@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniMap - MapmyIndia Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #map {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ UniMap - MapmyIndia Test</h1>
+        
+        <div class="status info" id="status">
+            Enter your MapmyIndia (Mappls) access token and click "Initialize Map"
+        </div>
+
+        <div class="controls">
+            <input 
+                type="text" 
+                id="apiKey" 
+                placeholder="Enter your MapmyIndia access token" 
+                style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
+            >
+            <button onclick="initializeMap()">Initialize Map</button>
+            <button onclick="addMarker()" id="addMarkerBtn" disabled>Add Marker</button>
+            <button onclick="drawRoute()" id="drawRouteBtn" disabled>Draw Route</button>
+            <button onclick="clearMap()" id="clearBtn" disabled>Clear</button>
+        </div>
+
+        <div id="map"></div>
+    </div>
+
+    <script type="module">
+        import { UniMap } from './unimap.js';
+
+        let map = null;
+        let markers = [];
+        let shapes = [];
+
+        window.initializeMap = async function() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey) {
+                updateStatus('Please enter a MapmyIndia access token', 'error');
+                return;
+            }
+
+            try {
+                updateStatus('Initializing MapmyIndia map...', 'info');
+                
+                map = new UniMap({
+                    provider: 'mapmyindia',
+                    apiKey: apiKey,
+                    containerId: 'map',
+                    options: {
+                        center: { lat: 28.6139, lng: 77.2090 }, // New Delhi
+                        zoom: 13
+                    }
+                });
+
+                await map.init();
+                updateStatus('✅ MapmyIndia map initialized successfully!', 'success');
+                
+                // Enable buttons
+                document.getElementById('addMarkerBtn').disabled = false;
+                document.getElementById('drawRouteBtn').disabled = false;
+                document.getElementById('clearBtn').disabled = false;
+
+            } catch (error) {
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+                console.error('Initialization error:', error);
+            }
+        };
+
+        window.addMarker = function() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const markerId = map.addMarker({
+                    lat: center.lat,
+                    lng: center.lng,
+                    title: 'MapmyIndia Marker',
+                    label: '📍'
+                });
+                markers.push(markerId);
+                updateStatus('✅ Marker added', 'success');
+            } catch (error) {
+                updateStatus(`❌ Error adding marker: ${error.message}`, 'error');
+            }
+        };
+
+        window.drawRoute = function() {
+            if (!map) return;
+            
+            try {
+                const center = map.getCenter();
+                const coords = [
+                    { lat: center.lat - 0.01, lng: center.lng - 0.01 },
+                    { lat: center.lat, lng: center.lng },
+                    { lat: center.lat + 0.01, lng: center.lng + 0.01 }
+                ];
+                
+                const routeId = map.drawRoute(coords, {
+                    strokeColor: '#007bff',
+                    strokeWeight: 3
+                });
+                shapes.push(routeId);
+                updateStatus('✅ Route drawn', 'success');
+            } catch (error) {
+                updateStatus(`❌ Error drawing route: ${error.message}`, 'error');
+            }
+        };
+
+        window.clearMap = function() {
+            if (!map) return;
+            
+            try {
+                markers.forEach(id => map.removeMarker(id));
+                shapes.forEach(id => {
+                    try { map.removeLayer(id); } catch(e) {}
+                });
+                markers = [];
+                shapes = [];
+                updateStatus('✅ Map cleared', 'success');
+            } catch (error) {
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+    </script>
+</body>
+</html>
