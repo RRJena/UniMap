@@ -143,23 +143,31 @@ export class BingMapsAdapter extends BaseAdapter {
 
   async geocode(address) {
     return new Promise((resolve, reject) => {
-      Microsoft.Maps.geocode({
-        query: address,
-        callback: (results, userData) => {
-          if (results && results.length > 0) {
-            const location = results[0].location;
-            resolve({
-              lat: location.latitude,
-              lng: location.longitude,
-              formattedAddress: results[0].address.formattedAddress
-            });
-          } else {
-            reject('No results found');
+      // Load the Search module if not already loaded
+      Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
+        // Create SearchManager instance
+        const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
+        
+        const geocodeRequest = {
+          where: address,
+          callback: (geocodeResult) => {
+            if (geocodeResult && geocodeResult.results && geocodeResult.results.length > 0) {
+              const location = geocodeResult.results[0].location;
+              resolve({
+                lat: location.latitude,
+                lng: location.longitude,
+                formattedAddress: geocodeResult.results[0].address.formattedAddress
+              });
+            } else {
+              reject('No results found');
+            }
+          },
+          errorCallback: (error) => {
+            reject(`Geocoding failed: ${error}`);
           }
-        },
-        errorCallback: (error) => {
-          reject(`Geocoding failed: ${error}`);
-        }
+        };
+        
+        searchManager.geocode(geocodeRequest);
       });
     });
   }
@@ -170,23 +178,31 @@ export class BingMapsAdapter extends BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
-      const location = new Microsoft.Maps.Location(lat, lng);
-      
-      Microsoft.Maps.reverseGeocode({
-        location: location,
-        callback: (results, userData) => {
-          if (results && results.length > 0) {
-            resolve({
-              formattedAddress: results[0].address.formattedAddress,
-              components: results[0].address
-            });
-          } else {
-            reject('No results found');
+      // Load the Search module if not already loaded
+      Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
+        // Create SearchManager instance
+        const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
+        
+        const location = new Microsoft.Maps.Location(lat, lng);
+        
+        const reverseGeocodeRequest = {
+          location: location,
+          callback: (reverseGeocodeResult) => {
+            if (reverseGeocodeResult && reverseGeocodeResult.address) {
+              resolve({
+                formattedAddress: reverseGeocodeResult.address.formattedAddress,
+                components: reverseGeocodeResult.address
+              });
+            } else {
+              reject('No results found');
+            }
+          },
+          errorCallback: (error) => {
+            reject(`Reverse geocoding failed: ${error}`);
           }
-        },
-        errorCallback: (error) => {
-          reject(`Reverse geocoding failed: ${error}`);
-        }
+        };
+        
+        searchManager.reverseGeocode(reverseGeocodeRequest);
       });
     });
   }
@@ -212,17 +228,36 @@ export class BingMapsAdapter extends BaseAdapter {
 
   async getDirections(origin, destination, options = {}) {
     return new Promise((resolve, reject) => {
-      const waypoints = [origin, destination];
-      
-      Microsoft.Maps.directions.DirectionsManager.getDirections({
-        waypoints: waypoints,
-        routeMode: options.travelMode || Microsoft.Maps.Directions.RouteMode.driving,
-        routeOptimization: options.optimizeWaypoints ? 
-          Microsoft.Maps.Directions.RouteOptimization.shortestTime : 
-          Microsoft.Maps.Directions.RouteOptimization.shortestDistance,
-        callback: (results, userData) => {
-          if (results && results.length > 0) {
-            const route = results[0];
+      try {
+        // Create a new DirectionsManager instance
+        const directionsManager = new Microsoft.Maps.Directions.DirectionsManager(this.map);
+        
+        // Set route options
+        directionsManager.setRequestOptions({
+          routeMode: options.travelMode || Microsoft.Maps.Directions.RouteMode.driving,
+          routeOptimization: options.optimizeWaypoints ? 
+            Microsoft.Maps.Directions.RouteOptimization.shortestTime : 
+            Microsoft.Maps.Directions.RouteOptimization.shortestDistance
+        });
+
+        // Add waypoints
+        const startWaypoint = new Microsoft.Maps.Directions.Waypoint({
+          location: new Microsoft.Maps.Location(origin.lat, origin.lng),
+          address: origin.address || ''
+        });
+        
+        const endWaypoint = new Microsoft.Maps.Directions.Waypoint({
+          location: new Microsoft.Maps.Location(destination.lat, destination.lng),
+          address: destination.address || ''
+        });
+
+        directionsManager.addWaypoint(startWaypoint);
+        directionsManager.addWaypoint(endWaypoint);
+
+        // Set event handlers
+        Microsoft.Maps.Events.addHandler(directionsManager, 'directionsUpdated', (e) => {
+          const route = e.route[0];
+          if (route) {
             const routeId = this.drawRoute(
               route.routePath.map(point => ({ lat: point.latitude, lng: point.longitude })),
               options
@@ -235,11 +270,18 @@ export class BingMapsAdapter extends BaseAdapter {
           } else {
             reject('No route found');
           }
-        },
-        errorCallback: (error) => {
-          reject(`Directions failed: ${error}`);
-        }
-      });
+        });
+
+        Microsoft.Maps.Events.addHandler(directionsManager, 'directionsError', (e) => {
+          reject(`Directions failed: ${e.message || 'Unknown error'}`);
+        });
+
+        // Calculate directions
+        directionsManager.calculateDirections();
+        
+      } catch (error) {
+        reject(`Directions failed: ${error.message || error}`);
+      }
     });
   }
 

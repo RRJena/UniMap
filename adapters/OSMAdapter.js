@@ -440,7 +440,78 @@ export class OSMAdapter extends BaseAdapter {
       });
       this.currentBaseLayer.addTo(this.map);
     } else if (typeof style === 'object') {
-      this.map.setOptions(style);
+      // Apply individual map options that Leaflet supports
+      if (style.minZoom !== undefined) {
+        this.map.setMinZoom(style.minZoom);
+      }
+      if (style.maxZoom !== undefined) {
+        this.map.setMaxZoom(style.maxZoom);
+      }
+      if (style.zoomSnap !== undefined) {
+        this.map.options.zoomSnap = style.zoomSnap;
+      }
+      if (style.zoomDelta !== undefined) {
+        this.map.options.zoomDelta = style.zoomDelta;
+      }
+      if (style.wheelPxPerZoomLevel !== undefined) {
+        this.map.options.wheelPxPerZoomLevel = style.wheelPxPerZoomLevel;
+      }
+      if (style.dragging !== undefined) {
+        if (style.dragging) {
+          this.map.dragging.enable();
+        } else {
+          this.map.dragging.disable();
+        }
+      }
+      if (style.touchZoom !== undefined) {
+        if (style.touchZoom) {
+          this.map.touchZoom.enable();
+        } else {
+          this.map.touchZoom.disable();
+        }
+      }
+      if (style.doubleClickZoom !== undefined) {
+        if (style.doubleClickZoom) {
+          this.map.doubleClickZoom.enable();
+        } else {
+          this.map.doubleClickZoom.disable();
+        }
+      }
+      if (style.scrollWheelZoom !== undefined) {
+        if (style.scrollWheelZoom) {
+          this.map.scrollWheelZoom.enable();
+        } else {
+          this.map.scrollWheelZoom.disable();
+        }
+      }
+      if (style.boxZoom !== undefined) {
+        if (style.boxZoom) {
+          this.map.boxZoom.enable();
+        } else {
+          this.map.boxZoom.disable();
+        }
+      }
+      if (style.keyboard !== undefined) {
+        if (style.keyboard) {
+          this.map.keyboard.enable();
+        } else {
+          this.map.keyboard.disable();
+        }
+      }
+      if (style.zoomControl !== undefined) {
+        if (style.zoomControl) {
+          this.map.addControl(L.control.zoom());
+        } else {
+          this.map.removeControl(this.map.zoomControl);
+        }
+      }
+      if (style.attributionControl !== undefined) {
+        if (style.attributionControl) {
+          this.map.addControl(L.control.attribution());
+        } else {
+          this.map.removeControl(this.map.attributionControl);
+        }
+      }
     }
   }
 
