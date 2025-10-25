@@ -220,6 +220,7 @@ export class MapboxAdapter extends BaseAdapter {
       }
     });
 
+    this.sources.set(sourceId, sourceId);
     this.polylines.set(routeId, { sourceId, layerId });
     return routeId;
   }
@@ -286,6 +287,7 @@ export class MapboxAdapter extends BaseAdapter {
       }
     });
 
+    this.sources.set(sourceId, sourceId);
     this.polygons.set(polygonId, { sourceId, layerId });
     return polygonId;
   }
@@ -368,6 +370,7 @@ export class MapboxAdapter extends BaseAdapter {
       }
     });
 
+    this.sources.set(sourceId, sourceId);
     this.heatmaps.set(heatmapId, { sourceId, layerId });
     return heatmapId;
   }
@@ -390,6 +393,7 @@ export class MapboxAdapter extends BaseAdapter {
       }
     });
 
+    this.sources.set(layerId, layerId);
     this.layers.set(layerId, layerId);
     return layerId;
   }
@@ -533,7 +537,7 @@ export class MapboxAdapter extends BaseAdapter {
     });
     this.eventListeners.clear();
 
-    this.sources.forEach((sourceId) => {
+    this.sources.forEach((sourceId, key) => {
       if (this.map.getSource(sourceId)) {
         this.map.removeSource(sourceId);
       }

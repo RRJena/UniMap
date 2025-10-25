@@ -5,6 +5,7 @@ export class OSMAdapter extends BaseAdapter {
     super(apiKey, containerId, options);
     this.eventListeners = new Map();
     this.tileLayers = new Map();
+    this.currentBaseLayer = null;
   }
 
   async init() {
@@ -23,10 +24,11 @@ export class OSMAdapter extends BaseAdapter {
       ...this.options
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    this.currentBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19
-    }).addTo(this.map);
+    });
+    this.currentBaseLayer.addTo(this.map);
   }
 
   loadLeafletScript() {
@@ -88,8 +90,17 @@ export class OSMAdapter extends BaseAdapter {
       if (options.position) {
         marker.setLatLng([options.position.lat, options.position.lng]);
       }
-      if (options.title !== undefined) marker.setTooltipContent(options.title);
-      if (options.label !== undefined) marker.setTooltipContent(options.label);
+      if (options.title !== undefined) {
+        marker.options.title = options.title;
+      }
+      if (options.label !== undefined) {
+        if (options.label) {
+          marker.bindTooltip(options.label);
+        } else {
+          // Remove tooltip if label is empty/null
+          marker.unbindTooltip();
+        }
+      }
       return true;
     }
     return false;
@@ -417,11 +428,17 @@ export class OSMAdapter extends BaseAdapter {
 
   applyMapStyle(style) {
     if (typeof style === 'string') {
-      this.map.removeLayer(this.map.getLayers()[0]);
-      L.tileLayer(style, {
+      // Remove the current base layer if it exists
+      if (this.currentBaseLayer && this.map.hasLayer(this.currentBaseLayer)) {
+        this.map.removeLayer(this.currentBaseLayer);
+      }
+      
+      // Create and add the new base layer
+      this.currentBaseLayer = L.tileLayer(style, {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
-      }).addTo(this.map);
+      });
+      this.currentBaseLayer.addTo(this.map);
     } else if (typeof style === 'object') {
       this.map.setOptions(style);
     }
@@ -486,6 +503,7 @@ export class OSMAdapter extends BaseAdapter {
     this.heatmaps.clear();
     this.layers.clear();
     this.tileLayers.clear();
+    this.currentBaseLayer = null;
 
     if (this.map) {
       this.map.remove();

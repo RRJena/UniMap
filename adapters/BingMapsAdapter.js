@@ -433,18 +433,19 @@ export class BingMapsAdapter extends BaseAdapter {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
-    this.eventListeners.get(event).push(callback);
     
-    Microsoft.Maps.Events.addHandler(this.map, event, callback);
+    const listener = Microsoft.Maps.Events.addHandler(this.map, event, callback);
+    this.eventListeners.get(event).push({ callback, listener });
   }
 
   off(event, callback) {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
-      const index = listeners.indexOf(callback);
+      const index = listeners.findIndex(item => item.callback === callback);
       if (index > -1) {
+        const { listener } = listeners[index];
+        Microsoft.Maps.Events.removeHandler(listener);
         listeners.splice(index, 1);
-        Microsoft.Maps.Events.removeHandler(callback);
       }
     }
   }
@@ -468,8 +469,8 @@ export class BingMapsAdapter extends BaseAdapter {
 
   destroy() {
     this.eventListeners.forEach((listeners, event) => {
-      listeners.forEach(callback => {
-        Microsoft.Maps.Events.removeHandler(callback);
+      listeners.forEach(({ listener }) => {
+        Microsoft.Maps.Events.removeHandler(listener);
       });
     });
     this.eventListeners.clear();

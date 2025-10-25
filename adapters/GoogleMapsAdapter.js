@@ -517,18 +517,19 @@ export class GoogleMapsAdapter extends BaseAdapter {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
-    this.eventListeners.get(event).push(callback);
     
-    this.map.addListener(event, callback);
+    const listener = this.map.addListener(event, callback);
+    this.eventListeners.get(event).push({ callback, listener });
   }
 
   off(event, callback) {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
-      const index = listeners.indexOf(callback);
+      const index = listeners.findIndex(item => item.callback === callback);
       if (index > -1) {
+        const { listener } = listeners[index];
+        google.maps.event.removeListener(listener);
         listeners.splice(index, 1);
-        google.maps.event.removeListener(callback);
       }
     }
   }
@@ -555,8 +556,8 @@ export class GoogleMapsAdapter extends BaseAdapter {
 
   destroy() {
     this.eventListeners.forEach((listeners, event) => {
-      listeners.forEach(callback => {
-        google.maps.event.removeListener(callback);
+      listeners.forEach(({ listener }) => {
+        google.maps.event.removeListener(listener);
       });
     });
     this.eventListeners.clear();
