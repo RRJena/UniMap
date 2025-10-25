@@ -6,7 +6,7 @@
 window.UNIMAP_CONFIG = {
   // Google Maps API Key - Replace with your actual key for testing
   google: {
-    apiKey: 'AIzaSyDZDjJ-tDjEBmRhDGhkKDU8PPUYnV6Fq-U'
+    apiKey: ''
   },
   
   // Mapbox API Key - Replace with your actual key for testing
