@@ -1,0 +1,53 @@
+name: "CodeQL Advanced"
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+  schedule:
+    - cron: '34 8 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: javascript-typescript
+          build-mode: manual
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: manual
+        queries: security-extended,security-and-quality
+
+    - name: Run manual build steps
+      if: matrix.build-mode == 'manual'
+      shell: bash
+      run: |
+        npm ci
+        # Use the project's build command
+        if npm run build --silent; then
+          echo "Build succeeded"
+        else
+          echo "Build failed or no build script found; aborting to avoid invalid CodeQL upload" >&2
+          exit 1
+        fi
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
