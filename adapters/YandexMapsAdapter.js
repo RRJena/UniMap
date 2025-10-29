@@ -151,7 +151,12 @@ export class YandexMapsAdapter extends BaseAdapter {
       const response = await fetch(url);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (response.status === 403) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`HTTP 403 Forbidden - API key may be invalid or missing geocoding permissions. ${errorText ? `Details: ${errorText}` : 'Please check your Yandex Maps API key configuration.'}`);
+        }
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
       }
 
       const data = await response.json();
@@ -201,7 +206,12 @@ export class YandexMapsAdapter extends BaseAdapter {
       const response = await fetch(url);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (response.status === 403) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`HTTP 403 Forbidden - API key may be invalid or missing geocoding permissions. ${errorText ? `Details: ${errorText}` : 'Please check your Yandex Maps API key configuration.'}`);
+        }
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
       }
 
       const data = await response.json();
