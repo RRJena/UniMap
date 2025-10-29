@@ -79,6 +79,15 @@ export class MapboxAdapter extends BaseAdapter {
   }
 
   addMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addMarker requires options with numeric lat and lng properties');
+    }
+
+    // Validate coordinates are valid numbers
+    if (!isFinite(options.lat) || !isFinite(options.lng)) {
+      throw new Error('addMarker requires valid numeric coordinates (lat and lng must be finite numbers)');
+    }
+
     const markerId = this._generateId();
     
     const el = document.createElement('div');
@@ -94,12 +103,17 @@ export class MapboxAdapter extends BaseAdapter {
       el.setAttribute('title', options.label);
     }
 
-    const marker = new mapboxgl.Marker(el)
-      .setLngLat([options.lng, options.lat])
-      .addTo(this.map);
+    // Mapbox expects [lng, lat] array format
+    try {
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([options.lng, options.lat])
+        .addTo(this.map);
 
-    this.markers.set(markerId, marker);
-    return markerId;
+      this.markers.set(markerId, marker);
+      return markerId;
+    } catch (error) {
+      throw new Error(`Failed to add marker: ${error.message || 'Invalid coordinates format. Mapbox expects [lng, lat] array.'}`);
+    }
   }
 
   removeMarker(markerId) {
@@ -116,7 +130,13 @@ export class MapboxAdapter extends BaseAdapter {
     const marker = this.markers.get(markerId);
     if (marker) {
       if (options.position) {
-        marker.setLngLat([options.position.lng, options.position.lat]);
+        const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+        const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+        
+        if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+          throw new Error('updateMarker position must have valid numeric lat and lng properties');
+        }
+        marker.setLngLat([lng, lat]);
       }
       return true;
     }
@@ -154,6 +174,9 @@ export class MapboxAdapter extends BaseAdapter {
   }
 
   panTo(coords) {
+    if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+      throw new Error('panTo requires coords with numeric lat and lng properties');
+    }
     if (this._validateCoordinates(coords.lat, coords.lng)) {
       this.map.panTo([coords.lng, coords.lat]);
     }
