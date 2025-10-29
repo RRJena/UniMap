@@ -4,6 +4,7 @@ export class TomTomAdapter extends BaseAdapter {
   constructor(apiKey, containerId, options = {}) {
     super(apiKey, containerId, options);
     this.eventListeners = new Map();
+    this._isLoaded = false;
   }
 
   async init() {
@@ -24,6 +25,24 @@ export class TomTomAdapter extends BaseAdapter {
       center: [centerLng, centerLat],
       zoom: this.options.zoom || 10
     });
+    await new Promise((resolve) => {
+      this.map.on('load', () => {
+        this._isLoaded = true;
+        resolve();
+      });
+    });
+  }
+
+  isReady() {
+    return !!this._isLoaded;
+  }
+
+  executeWhenReady(callback) {
+    if (this.isReady()) {
+      callback();
+    } else {
+      this.map.once('load', callback);
+    }
   }
 
   loadTomTomScript() {
@@ -186,22 +205,23 @@ export class TomTomAdapter extends BaseAdapter {
         coordinates: coords.map(c => [c.lng, c.lat])
       }
     };
-
-    this.map.addLayer({
-      id: routeId,
-      type: 'line',
-      source: {
-        type: 'geojson',
-        data: geojson
-      },
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 3
-      }
+    this.executeWhenReady(() => {
+      this.map.addLayer({
+        id: routeId,
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: geojson
+        },
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': options.strokeColor || '#FF0000',
+          'line-width': options.strokeWeight || 3
+        }
+      });
     });
     
     this.polylines.set(routeId, geojson);
@@ -239,38 +259,48 @@ export class TomTomAdapter extends BaseAdapter {
   drawPolygon(coords, options = {}) {
     const polygonId = this._generateId();
     
+    const ring = coords.map(c => [c.lng, c.lat]);
+    if (ring.length > 0) {
+      const first = ring[0];
+      const last = ring[ring.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        ring.push([first[0], first[1]]);
+      }
+    }
+
     const geojson = {
       type: 'Feature',
       geometry: {
         type: 'Polygon',
-        coordinates: [[...coords.map(c => [c.lng, c.lat]), coords[0].lng, coords[0].lat]]
+        coordinates: [ring]
       }
     };
+    this.executeWhenReady(() => {
+      this.map.addLayer({
+        id: polygonId,
+        type: 'fill',
+        source: {
+          type: 'geojson',
+          data: geojson
+        },
+        paint: {
+          'fill-color': options.fillColor || '#FF0000',
+          'fill-opacity': options.fillOpacity || 0.35
+        }
+      });
 
-    this.map.addLayer({
-      id: polygonId,
-      type: 'fill',
-      source: {
-        type: 'geojson',
-        data: geojson
-      },
-      paint: {
-        'fill-color': options.fillColor || '#FF0000',
-        'fill-opacity': options.fillOpacity || 0.35
-      }
-    });
-
-    this.map.addLayer({
-      id: polygonId + '-outline',
-      type: 'line',
-      source: {
-        type: 'geojson',
-        data: geojson
-      },
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 2
-      }
+      this.map.addLayer({
+        id: polygonId + '-outline',
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: geojson
+        },
+        paint: {
+          'line-color': options.strokeColor || '#FF0000',
+          'line-width': options.strokeWeight || 2
+        }
+      });
     });
     
     this.polygons.set(polygonId, geojson);
@@ -345,33 +375,37 @@ export class TomTomAdapter extends BaseAdapter {
         }
       }))
     };
-
-    this.map.addSource(heatmapId, {
-      type: 'geojson',
-      data: geojson
-    });
-
-    this.map.addLayer({
-      id: heatmapId,
-      type: 'heatmap',
-      source: heatmapId,
-      maxzoom: 15,
-      paint: {
-        'heatmap-weight': options.weight || 1,
-        'heatmap-intensity': options.intensity || 1,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0, 'rgba(33,102,172,0)',
-          0.2, 'rgb(103,169,207)',
-          0.4, 'rgb(209,229,240)',
-          0.6, 'rgb(253,219,199)',
-          0.8, 'rgb(239,138,98)',
-          1, 'rgb(178,24,43)'
-        ],
-        'heatmap-radius': options.radius || 20,
-        'heatmap-opacity': options.opacity || 0.6
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(heatmapId)) {
+        this.map.addSource(heatmapId, {
+          type: 'geojson',
+          data: geojson
+        });
+      }
+      if (!this.map.getLayer(heatmapId)) {
+        this.map.addLayer({
+          id: heatmapId,
+          type: 'heatmap',
+          source: heatmapId,
+          maxzoom: 15,
+          paint: {
+            'heatmap-weight': options.weight || 1,
+            'heatmap-intensity': options.intensity || 1,
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0, 'rgba(33,102,172,0)',
+              0.2, 'rgb(103,169,207)',
+              0.4, 'rgb(209,229,240)',
+              0.6, 'rgb(253,219,199)',
+              0.8, 'rgb(239,138,98)',
+              1, 'rgb(178,24,43)'
+            ],
+            'heatmap-radius': options.radius || 20,
+            'heatmap-opacity': options.opacity || 0.6
+          }
+        });
       }
     });
     
@@ -393,8 +427,9 @@ export class TomTomAdapter extends BaseAdapter {
       minzoom: options.minzoom || 0,
       maxzoom: options.maxzoom || 22
     };
-    
-    this.map.addLayer(tileLayer);
+    this.executeWhenReady(() => {
+      this.map.addLayer(tileLayer);
+    });
     this.layers.set(layerId, tileLayer);
     
     return layerId;
