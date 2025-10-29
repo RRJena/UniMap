@@ -6,6 +6,7 @@ export class MapboxAdapter extends BaseAdapter {
     this.eventListeners = new Map();
     this.sources = new Map();
     this.layers = new Map();
+    this._isLoaded = false;
   }
 
   async init() {
@@ -29,8 +30,27 @@ export class MapboxAdapter extends BaseAdapter {
     });
 
     await new Promise((resolve) => {
-      this.map.on('load', resolve);
+      this.map.on('load', () => {
+        this._isLoaded = true;
+        resolve();
+      });
     });
+  }
+
+  isReady() {
+    if (!this.map) return false;
+    if (typeof this.map.isStyleLoaded === 'function') {
+      return this.map.isStyleLoaded();
+    }
+    return this._isLoaded;
+  }
+
+  executeWhenReady(callback) {
+    if (this.isReady()) {
+      callback();
+    } else {
+      this.map.once('load', callback);
+    }
   }
 
   loadMapboxScript() {
@@ -196,30 +216,35 @@ export class MapboxAdapter extends BaseAdapter {
 
     const coordinates = coords.map(coord => [coord.lng, coord.lat]);
 
-    this.map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates
-        }
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(sourceId)) {
+        this.map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: coordinates
+            }
+          }
+        });
       }
-    });
-
-    this.map.addLayer({
-      id: layerId,
-      type: 'line',
-      source: sourceId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 3,
-        'line-opacity': options.strokeOpacity || 1.0
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'line',
+          source: sourceId,
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': options.strokeColor || '#FF0000',
+            'line-width': options.strokeWeight || 3,
+            'line-opacity': options.strokeOpacity || 1.0
+          }
+        });
       }
     });
 
@@ -237,7 +262,8 @@ export class MapboxAdapter extends BaseAdapter {
     );
     
     if (!response.ok) {
-      throw new Error(`Directions failed: ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`Directions failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
     
     const data = await response.json();
@@ -257,36 +283,45 @@ export class MapboxAdapter extends BaseAdapter {
 
     const coordinates = coords.map(coord => [coord.lng, coord.lat]);
 
-    this.map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'Polygon',
-          coordinates: [coordinates]
-        }
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(sourceId)) {
+        this.map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [coordinates]
+            }
+          }
+        });
       }
-    });
 
-    this.map.addLayer({
-      id: layerId,
-      type: 'fill',
-      source: sourceId,
-      paint: {
-        'fill-color': options.fillColor || '#FF0000',
-        'fill-opacity': options.fillOpacity || 0.35
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'fill',
+          source: sourceId,
+          paint: {
+            'fill-color': options.fillColor || '#FF0000',
+            'fill-opacity': options.fillOpacity || 0.35
+          }
+        });
       }
-    });
 
-    this.map.addLayer({
-      id: `${layerId}-outline`,
-      type: 'line',
-      source: sourceId,
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 2,
-        'line-opacity': options.strokeOpacity || 0.8
+      const outlineId = `${layerId}-outline`;
+      if (!this.map.getLayer(outlineId)) {
+        this.map.addLayer({
+          id: outlineId,
+          type: 'line',
+          source: sourceId,
+          paint: {
+            'line-color': options.strokeColor || '#FF0000',
+            'line-width': options.strokeWeight || 2,
+            'line-opacity': options.strokeOpacity || 0.8
+          }
+        });
       }
     });
 
@@ -345,31 +380,36 @@ export class MapboxAdapter extends BaseAdapter {
       }
     }));
 
-    this.map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: features
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(sourceId)) {
+        this.map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: features
+          }
+        });
       }
-    });
-
-    this.map.addLayer({
-      id: layerId,
-      type: 'heatmap',
-      source: sourceId,
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': options.intensity || 1,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0, 'rgba(0, 0, 255, 0)',
-          0.5, 'rgba(0, 0, 255, 1)',
-          1, 'rgba(255, 0, 0, 1)'
-        ],
-        'heatmap-radius': options.radius || 20,
-        'heatmap-opacity': options.opacity || 0.6
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'heatmap',
+          source: sourceId,
+          paint: {
+            'heatmap-weight': ['get', 'weight'],
+            'heatmap-intensity': options.intensity || 1,
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0, 'rgba(0, 0, 255, 0)',
+              0.5, 'rgba(0, 0, 255, 1)',
+              1, 'rgba(255, 0, 0, 1)'
+            ],
+            'heatmap-radius': options.radius || 20,
+            'heatmap-opacity': options.opacity || 0.6
+          }
+        });
       }
     });
 
@@ -381,18 +421,23 @@ export class MapboxAdapter extends BaseAdapter {
   addTileLayer(url, options = {}) {
     const layerId = this._generateId();
     
-    this.map.addSource(layerId, {
-      type: 'raster',
-      tiles: [url],
-      tileSize: options.tileSize || 256
-    });
-
-    this.map.addLayer({
-      id: layerId,
-      type: 'raster',
-      source: layerId,
-      paint: {
-        'raster-opacity': options.opacity || 1.0
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(layerId)) {
+        this.map.addSource(layerId, {
+          type: 'raster',
+          tiles: [url],
+          tileSize: options.tileSize || 256
+        });
+      }
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'raster',
+          source: layerId,
+          paint: {
+            'raster-opacity': options.opacity || 1.0
+          }
+        });
       }
     });
 
