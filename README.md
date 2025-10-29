@@ -288,6 +288,18 @@ map.on('zoom_changed', () => {
 
 ## Changelog
 
+### [2.2.11] - 2025-10-30
+
+**Changed:**
+- Consolidated documentation into a single README.md
+- Updated repository, homepage, wiki, and issues links to RRJena/UniMap
+- Personalized credits: “Made with ❤️ by Rakesh Ranjan Jena”
+- Updated package metadata: author, repository, bugs, homepage
+- Included LICENSE.md in published files
+
+**Published:**
+- Released to npm as `unimap@2.2.11`
+
 ### [2.2.7] - 2024-12-19
 
 **Fixed:**
