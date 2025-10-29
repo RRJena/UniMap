@@ -156,6 +156,16 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(`HTTP ${response.status} Unauthorized - API key may be invalid or missing geocoding permissions. Please check your MapmyIndia API key configuration.`);
+        }
+        if (response.status === 412) {
+          throw new Error(`HTTP 412 Precondition Failed - MapmyIndia API key may require additional configuration or the request format is invalid.`);
+        }
+      }
+      
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
@@ -168,6 +178,9 @@ export class MapmyIndiaAdapter extends BaseAdapter {
       }
       throw new Error('No results found');
     } catch (error) {
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        throw new Error(`Geocoding failed: CORS error - MapmyIndia API does not allow requests from your origin. This is an API limitation. Consider using a proxy server or contact MapmyIndia to enable CORS for your domain.`);
+      }
       throw new Error(`Geocoding failed: ${error.message}`);
     }
   }
@@ -181,6 +194,16 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(`HTTP ${response.status} Unauthorized - API key may be invalid or missing reverse geocoding permissions. Please check your MapmyIndia API key configuration.`);
+        }
+        if (response.status === 412) {
+          throw new Error(`HTTP 412 Precondition Failed - MapmyIndia API key may require additional configuration or the request format is invalid.`);
+        }
+      }
+      
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
@@ -192,6 +215,9 @@ export class MapmyIndiaAdapter extends BaseAdapter {
       }
       throw new Error('No results found');
     } catch (error) {
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        throw new Error(`Reverse geocoding failed: CORS error - MapmyIndia API does not allow requests from your origin. This is an API limitation. Consider using a proxy server or contact MapmyIndia to enable CORS for your domain.`);
+      }
       throw new Error(`Reverse geocoding failed: ${error.message}`);
     }
   }
@@ -218,6 +244,16 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(`HTTP ${response.status} Unauthorized - API key may be invalid or missing routing permissions. Please check your MapmyIndia API key configuration.`);
+        }
+        if (response.status === 412) {
+          throw new Error(`HTTP 412 Precondition Failed - MapmyIndia API key may require additional configuration or the request format is invalid.`);
+        }
+      }
+      
       const data = await response.json();
       
       if (data.routes && data.routes.length > 0) {
