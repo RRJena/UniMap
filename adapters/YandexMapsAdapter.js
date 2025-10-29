@@ -5,8 +5,6 @@ export class YandexMapsAdapter extends BaseAdapter {
     super(apiKey, containerId, options);
     this.eventListeners = new Map();
     this.placemarks = [];
-    this.polylines = [];
-    this.polygons = [];
   }
 
   async init() {
@@ -126,21 +124,33 @@ export class YandexMapsAdapter extends BaseAdapter {
 
   async geocode(address) {
     return new Promise((resolve, reject) => {
-      ymaps.geocode(address).then((res) => {
-        const firstGeoObject = res.geoObjects.get(0);
-        if (firstGeoObject) {
-          const coords = firstGeoObject.geometry.getCoordinates();
-          resolve({
-            lat: coords[0],
-            lng: coords[1],
-            formattedAddress: firstGeoObject.getAddressLine()
+      if (!address || typeof address !== 'string' || address.trim() === '') {
+        return reject(new Error('Address must be a non-empty string'));
+      }
+      
+      try {
+        ymaps.geocode(address.trim(), { results: 1 })
+          .then((res) => {
+            const firstGeoObject = res.geoObjects.get(0);
+            if (firstGeoObject) {
+              const coords = firstGeoObject.geometry.getCoordinates();
+              resolve({
+                lat: coords[0],
+                lng: coords[1],
+                formattedAddress: firstGeoObject.getAddressLine()
+              });
+            } else {
+              reject(new Error('No results found'));
+            }
+          })
+          .catch((error) => {
+            const message = error && error.message ? error.message : 
+                          (typeof error === 'string' ? error : 'Unknown geocoding error');
+            reject(new Error(`Geocoding failed: ${message}`));
           });
-        } else {
-          reject(new Error('No results found'));
-        }
-      }).catch((error) => {
-        reject(new Error(`Geocoding failed: ${error.message}`));
-      });
+      } catch (error) {
+        reject(new Error(`Geocoding failed: ${error.message || 'Unknown error'}`));
+      }
     });
   }
 
@@ -150,19 +160,27 @@ export class YandexMapsAdapter extends BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
-      ymaps.geocode([lat, lng]).then((res) => {
-        const firstGeoObject = res.geoObjects.get(0);
-        if (firstGeoObject) {
-          resolve({
-            formattedAddress: firstGeoObject.getAddressLine(),
-            components: {}
+      try {
+        ymaps.geocode([lat, lng], { results: 1 })
+          .then((res) => {
+            const firstGeoObject = res.geoObjects.get(0);
+            if (firstGeoObject) {
+              resolve({
+                formattedAddress: firstGeoObject.getAddressLine(),
+                components: {}
+              });
+            } else {
+              reject(new Error('No results found'));
+            }
+          })
+          .catch((error) => {
+            const message = error && error.message ? error.message : 
+                          (typeof error === 'string' ? error : 'Unknown reverse geocoding error');
+            reject(new Error(`Reverse geocoding failed: ${message}`));
           });
-        } else {
-          reject(new Error('No results found'));
-        }
-      }).catch((error) => {
-        reject(new Error(`Reverse geocoding failed: ${error.message}`));
-      });
+      } catch (error) {
+        reject(new Error(`Reverse geocoding failed: ${error.message || 'Unknown error'}`));
+      }
     });
   }
 
@@ -180,7 +198,6 @@ export class YandexMapsAdapter extends BaseAdapter {
     );
 
     this.map.geoObjects.add(polyline);
-    this.polylines.push(polyline);
     this.polylines.set(routeId, polyline);
     
     return routeId;
@@ -188,20 +205,62 @@ export class YandexMapsAdapter extends BaseAdapter {
 
   async getDirections(origin, destination, options = {}) {
     return new Promise((resolve, reject) => {
-      ymaps.route([
-        [origin.lat, origin.lng],
-        [destination.lat, destination.lng]
-      ]).then((route) => {
-        const routeId = this.drawRoute([], options);
-        
-        resolve({
-          routeId,
-          duration: route.getJamsTime(),
-          distance: route.getLength()
+      if (!this._validateCoordinates(origin.lat, origin.lng) ||
+        !this._validateCoordinates(destination.lat, destination.lng)) {
+        return reject(new Error('Invalid origin or destination coordinates'));
+      }
+
+      try {
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: [
+            [origin.lat, origin.lng],
+            [destination.lat, destination.lng]
+          ],
+          params: {
+            routingMode: options.travelMode === 'walking' ? 'pedestrian' : 'auto'
+          }
+        }, {
+          boundsAutoApply: true
         });
-      }).catch((error) => {
-        reject(new Error(`Directions failed: ${error.message}`));
-      });
+
+        multiRoute.model.events.add('requestsuccess', () => {
+          const routes = multiRoute.getRoutes();
+          if (routes && routes.getLength() > 0) {
+            const route = routes.get(0);
+            const coordinates = [];
+            
+            route.getPaths().each((path) => {
+              path.getSegments().each((segment) => {
+                const coords = segment.getCoordinates();
+                coords.forEach(coord => coordinates.push({ lat: coord[0], lng: coord[1] }));
+              });
+            });
+
+            if (coordinates.length > 0) {
+              const routeId = this.drawRoute(coordinates, options);
+              resolve({
+                routeId,
+                duration: route.properties.get('duration').value || 0,
+                distance: route.properties.get('distance').value || 0
+              });
+            } else {
+              reject(new Error('No route path found'));
+            }
+          } else {
+            reject(new Error('No routes found'));
+          }
+        });
+
+        multiRoute.model.events.add('requesterror', (event) => {
+          const error = event.get('error');
+          const message = error && error.message ? error.message : 'Unknown routing error';
+          reject(new Error(`Directions failed: ${message}`));
+        });
+
+        this.map.geoObjects.add(multiRoute);
+      } catch (error) {
+        reject(new Error(`Directions failed: ${error.message || 'Unknown error'}`));
+      }
     });
   }
 
@@ -221,7 +280,6 @@ export class YandexMapsAdapter extends BaseAdapter {
     );
 
     this.map.geoObjects.add(polygon);
-    this.polygons.push(polygon);
     this.polygons.set(polygonId, polygon);
     
     return polygonId;
@@ -390,7 +448,10 @@ export class YandexMapsAdapter extends BaseAdapter {
   }
 
   destroy() {
-    this.map.destroy();
+    if (this.map) {
+      this.map.geoObjects.removeAll();
+      this.map.destroy();
+    }
     this.markers.clear();
     this.polylines.clear();
     this.polygons.clear();
