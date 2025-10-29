@@ -27,6 +27,8 @@ export default [
         fetch: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
         // Map SDK globals
         google: 'readonly',
         mappls: 'readonly',
