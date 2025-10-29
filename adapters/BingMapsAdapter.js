@@ -174,47 +174,35 @@ export class BingMapsAdapter extends BaseAdapter {
       }, 30000);
 
       try {
-        // Load the Search module if not already loaded
         Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
           try {
-            // Create SearchManager instance
             const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
-            
-            const geocodeRequest = {
-              where: address,
-              callback: (geocodeResult) => {
+            const request = {
+              where: address.trim(),
+              callback: (result) => {
                 clearTimeout(timeout);
-                try {
-                  if (geocodeResult && geocodeResult.results && geocodeResult.results.length > 0) {
-                    const location = geocodeResult.results[0].location;
-                    resolve({
-                      lat: location.latitude,
-                      lng: location.longitude,
-                      formattedAddress: geocodeResult.results[0].address.formattedAddress
-                    });
-                  } else {
-                    reject(new Error('No results found'));
-                  }
-                } catch (err) {
-                  reject(new Error(`Geocoding callback error: ${err.message}`));
+                if (result && result.results && result.results.length > 0) {
+                  const best = result.results[0];
+                  resolve({
+                    lat: best.location.latitude,
+                    lng: best.location.longitude,
+                    formattedAddress: best.address?.formattedAddress || best.name || address
+                  });
+                } else {
+                  reject(new Error('No results found'));
                 }
               },
-              errorCallback: (error) => {
+              errorCallback: (err) => {
                 clearTimeout(timeout);
-                const errorMsg = error && error.message ? error.message : 
-                               (typeof error === 'string' ? error : JSON.stringify(error));
-                reject(new Error(`Geocoding failed: ${errorMsg}`));
+                const message = (err && err.message) ? err.message : 'Unknown geocoding error';
+                reject(new Error(`Geocoding failed: ${message}`));
               }
             };
-            
-            searchManager.geocode(geocodeRequest);
+            searchManager.geocode(request);
           } catch (err) {
             clearTimeout(timeout);
             reject(new Error(`Geocoding setup error: ${err.message}`));
           }
-        }, (errorCallback) => {
-          clearTimeout(timeout);
-          reject(new Error(`Failed to load Bing Maps Search module: ${errorCallback}`));
         });
       } catch (err) {
         clearTimeout(timeout);
@@ -234,47 +222,34 @@ export class BingMapsAdapter extends BaseAdapter {
       }, 30000);
 
       try {
-        // Load the Search module if not already loaded
         Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
           try {
-            // Create SearchManager instance
             const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
-            
             const location = new Microsoft.Maps.Location(lat, lng);
-            
-            const reverseGeocodeRequest = {
-              location: location,
-              callback: (reverseGeocodeResult) => {
+            const request = {
+              location,
+              callback: (result) => {
                 clearTimeout(timeout);
-                try {
-                  if (reverseGeocodeResult && reverseGeocodeResult.address) {
-                    resolve({
-                      formattedAddress: reverseGeocodeResult.address.formattedAddress,
-                      components: reverseGeocodeResult.address
-                    });
-                  } else {
-                    reject(new Error('No results found'));
-                  }
-                } catch (err) {
-                  reject(new Error(`Reverse geocoding callback error: ${err.message}`));
+                if (result && result.address) {
+                  resolve({
+                    formattedAddress: result.address.formattedAddress,
+                    components: result.address
+                  });
+                } else {
+                  reject(new Error('No results found'));
                 }
               },
-              errorCallback: (error) => {
+              errorCallback: (err) => {
                 clearTimeout(timeout);
-                const errorMsg = error && error.message ? error.message : 
-                               (typeof error === 'string' ? error : JSON.stringify(error));
-                reject(new Error(`Reverse geocoding failed: ${errorMsg}`));
+                const message = (err && err.message) ? err.message : 'Unknown reverse geocoding error';
+                reject(new Error(`Reverse geocoding failed: ${message}`));
               }
             };
-            
-            searchManager.reverseGeocode(reverseGeocodeRequest);
+            searchManager.reverseGeocode(request);
           } catch (err) {
             clearTimeout(timeout);
             reject(new Error(`Reverse geocoding setup error: ${err.message}`));
           }
-        }, (errorCallback) => {
-          clearTimeout(timeout);
-          reject(new Error(`Failed to load Bing Maps Search module: ${errorCallback}`));
         });
       } catch (err) {
         clearTimeout(timeout);
