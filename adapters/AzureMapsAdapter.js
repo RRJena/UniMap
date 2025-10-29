@@ -277,7 +277,6 @@ export class AzureMapsAdapter extends BaseAdapter {
 
   drawCircle(center, radius, options = {}) {
     // Approximate circle as a polygon
-    const circleId = this._generateId();
     const points = [];
     
     for (let i = 0; i < 64; i++) {

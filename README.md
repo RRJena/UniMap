@@ -290,6 +290,23 @@ map.on('zoom_changed', () => {
 
 ### [2.2.11] - 2025-10-30
 
+**Fixed:**
+- Resolved CodeQL alert "DOM text reinterpreted as HTML" across adapters:
+  - Replaced unsafe `innerHTML` usage with safe DOM node removal when clearing containers
+  - Escaped/sanitized popup and info window content (e.g., Azure Maps `HtmlMarker`, MapmyIndia `InfoWindow`)
+- Stabilized CI for CodeQL and Node setup:
+  - Committed lockfile to enable `actions/setup-node` caching
+  - Aligned with GitHub's Default CodeQL setup to avoid SARIF processing conflicts
+- Removed unused variables in adapter methods:
+  - Cleaned up unused `circleId` variables in `drawCircle` implementations (Azure, TomTom, Yandex adapters)
+
+**Added:**
+- ESLint configuration with security-focused rules:
+  - Flat config (`eslint.config.js`) for ESLint v9+ compatibility
+  - Security plugin to detect unsafe patterns (blocks `innerHTML` assignments)
+  - Proper globals configuration for browser APIs and map SDKs
+  - Linting scripts: `npm run lint` and `npm run lint:fix`
+
 **Changed:**
 - Consolidated documentation into a single README.md
 - Updated repository, homepage, wiki, and issues links to RRJena/UniMap

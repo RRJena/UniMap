@@ -232,7 +232,6 @@ export class YandexMapsAdapter extends BaseAdapter {
   }
 
   drawCircle(center, radius, options = {}) {
-    const circleId = this._generateId();
     // Yandex doesn't have built-in circle, use polygon approximation
     const points = [];
     
