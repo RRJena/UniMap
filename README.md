@@ -314,6 +314,14 @@ map.on('zoom_changed', () => {
 - Updated package metadata: author, repository, bugs, homepage
 - Included LICENSE.md in published files
 
+**Provider Notes:**
+- Bing Maps:
+  - Service capabilities are limited and parts of the platform are deprecated by Microsoft. Some features (reliable geocoding/reverse geocoding and routing between specific waypoints) can intermittently fail.
+  - We added REST API fallbacks for geocoding and reverse geocoding, but you may still encounter messages such as:
+    - “We cannot find directions between one or more waypoints” for certain coordinates
+    - Geocoding/Reverse geocoding failures for specific inputs
+  - Recommendation: Prefer `Azure Maps` for production workloads. UniMap provides a first-class `AzureMapsAdapter` with more reliable geocoding, reverse geocoding, routing, and layers.
+
 **Published:**
 - Released to npm as `unimap@2.2.11`
 
