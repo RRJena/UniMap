@@ -123,35 +123,55 @@ export class YandexMapsAdapter extends BaseAdapter {
   }
 
   async geocode(address) {
-    return new Promise((resolve, reject) => {
-      if (!address || typeof address !== 'string' || address.trim() === '') {
-        return reject(new Error('Address must be a non-empty string'));
+    if (!address || typeof address !== 'string' || address.trim() === '') {
+      return Promise.reject(new Error('Address must be a non-empty string'));
+    }
+
+    // Try JavaScript API first, fallback to REST API
+    try {
+      if (window.ymaps && window.ymaps.geocode) {
+        const res = await ymaps.geocode(address.trim(), { results: 1 });
+        const firstGeoObject = res.geoObjects.get(0);
+        if (firstGeoObject) {
+          const coords = firstGeoObject.geometry.getCoordinates();
+          return {
+            lat: coords[0],
+            lng: coords[1],
+            formattedAddress: firstGeoObject.getAddressLine()
+          };
+        }
+      }
+    } catch {
+      // Fall through to REST API
+    }
+
+    // Fallback to REST API
+    try {
+      const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${this.apiKey}&geocode=${encodeURIComponent(address.trim())}&format=json&results=1`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const geoObjects = data?.response?.GeoObjectCollection?.featureMember;
+      
+      if (geoObjects && geoObjects.length > 0) {
+        const geoObject = geoObjects[0].GeoObject;
+        const pos = geoObject.Point.pos.split(' ');
+        return {
+          lat: parseFloat(pos[1]),
+          lng: parseFloat(pos[0]),
+          formattedAddress: geoObject.metaDataProperty?.GeocoderMetaData?.text || geoObject.name || address
+        };
       }
       
-      try {
-        ymaps.geocode(address.trim(), { results: 1 })
-          .then((res) => {
-            const firstGeoObject = res.geoObjects.get(0);
-            if (firstGeoObject) {
-              const coords = firstGeoObject.geometry.getCoordinates();
-              resolve({
-                lat: coords[0],
-                lng: coords[1],
-                formattedAddress: firstGeoObject.getAddressLine()
-              });
-            } else {
-              reject(new Error('No results found'));
-            }
-          })
-          .catch((error) => {
-            const message = error && error.message ? error.message : 
-                          (typeof error === 'string' ? error : 'Unknown geocoding error');
-            reject(new Error(`Geocoding failed: ${message}`));
-          });
-      } catch (error) {
-        reject(new Error(`Geocoding failed: ${error.message || 'Unknown error'}`));
-      }
-    });
+      throw new Error('No results found');
+    } catch (error) {
+      const message = error && error.message ? error.message : 'Unknown geocoding error';
+      throw new Error(`Geocoding failed: ${message}`);
+    }
   }
 
   async reverseGeocode(lat, lng) {
@@ -159,29 +179,47 @@ export class YandexMapsAdapter extends BaseAdapter {
       return Promise.reject(new Error('Invalid coordinates'));
     }
 
-    return new Promise((resolve, reject) => {
-      try {
-        ymaps.geocode([lat, lng], { results: 1 })
-          .then((res) => {
-            const firstGeoObject = res.geoObjects.get(0);
-            if (firstGeoObject) {
-              resolve({
-                formattedAddress: firstGeoObject.getAddressLine(),
-                components: {}
-              });
-            } else {
-              reject(new Error('No results found'));
-            }
-          })
-          .catch((error) => {
-            const message = error && error.message ? error.message : 
-                          (typeof error === 'string' ? error : 'Unknown reverse geocoding error');
-            reject(new Error(`Reverse geocoding failed: ${message}`));
-          });
-      } catch (error) {
-        reject(new Error(`Reverse geocoding failed: ${error.message || 'Unknown error'}`));
+    // Try JavaScript API first, fallback to REST API
+    try {
+      if (window.ymaps && window.ymaps.geocode) {
+        const res = await ymaps.geocode([lat, lng], { results: 1 });
+        const firstGeoObject = res.geoObjects.get(0);
+        if (firstGeoObject) {
+          return {
+            formattedAddress: firstGeoObject.getAddressLine(),
+            components: {}
+          };
+        }
       }
-    });
+    } catch {
+      // Fall through to REST API
+    }
+
+    // Fallback to REST API
+    try {
+      const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${this.apiKey}&geocode=${lng},${lat}&format=json&results=1`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const geoObjects = data?.response?.GeoObjectCollection?.featureMember;
+      
+      if (geoObjects && geoObjects.length > 0) {
+        const geoObject = geoObjects[0].GeoObject;
+        return {
+          formattedAddress: geoObject.metaDataProperty?.GeocoderMetaData?.text || geoObject.name || `${lat},${lng}`,
+          components: {}
+        };
+      }
+      
+      throw new Error('No results found');
+    } catch (error) {
+      const message = error && error.message ? error.message : 'Unknown reverse geocoding error';
+      throw new Error(`Reverse geocoding failed: ${message}`);
+    }
   }
 
   drawRoute(coords, options = {}) {
