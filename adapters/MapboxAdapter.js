@@ -17,6 +17,12 @@ export class MapboxAdapter extends BaseAdapter {
       throw new Error(`Container element with ID '${this.containerId}' not found.`);
     }
 
+    // Validate and set access token for Mapbox GL JS
+    if (!this.apiKey || typeof this.apiKey !== 'string') {
+      throw new Error('Mapbox access token is required');
+    }
+    mapboxgl.accessToken = this.apiKey;
+
     // Validate center coordinates
     const centerLat = typeof this.options.center?.lat === 'number' ? this.options.center.lat : 0;
     const centerLng = typeof this.options.center?.lng === 'number' ? this.options.center.lng : 0;
@@ -25,8 +31,7 @@ export class MapboxAdapter extends BaseAdapter {
       container: this.containerId,
       style: this.options.style || 'mapbox://styles/mapbox/streets-v11',
       center: [centerLng, centerLat],
-      zoom: this.options.zoom || 10,
-      accessToken: this.apiKey
+      zoom: this.options.zoom || 10
     });
 
     await new Promise((resolve) => {
@@ -169,7 +174,8 @@ export class MapboxAdapter extends BaseAdapter {
     );
     
     if (!response.ok) {
-      throw new Error(`Geocoding failed: ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`Geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
     
     const data = await response.json();
@@ -195,7 +201,8 @@ export class MapboxAdapter extends BaseAdapter {
     );
     
     if (!response.ok) {
-      throw new Error(`Reverse geocoding failed: ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`Reverse geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
     
     const data = await response.json();
