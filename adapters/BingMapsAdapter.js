@@ -192,9 +192,19 @@ export class BingMapsAdapter extends BaseAdapter {
                   reject(new Error('No results found'));
                 }
               },
-              errorCallback: (err) => {
+              errorCallback: async (err) => {
                 clearTimeout(timeout);
-                const message = (err && err.message) ? err.message : 'Unknown geocoding error';
+                const message = (err && err.message) ? err.message : (err ? JSON.stringify(err) : 'Unknown geocoding error');
+                // Fallback to REST geocoding if client API fails
+                try {
+                  const rest = await this._bingRestGeocode(address);
+                  if (rest) {
+                    resolve(rest);
+                    return;
+                  }
+                } catch {
+                  // ignore, will fall through
+                }
                 reject(new Error(`Geocoding failed: ${message}`));
               }
             };
@@ -239,9 +249,19 @@ export class BingMapsAdapter extends BaseAdapter {
                   reject(new Error('No results found'));
                 }
               },
-              errorCallback: (err) => {
+              errorCallback: async (err) => {
                 clearTimeout(timeout);
-                const message = (err && err.message) ? err.message : 'Unknown reverse geocoding error';
+                const message = (err && err.message) ? err.message : (err ? JSON.stringify(err) : 'Unknown reverse geocoding error');
+                // Fallback to REST reverse geocoding
+                try {
+                  const rest = await this._bingRestReverseGeocode(lat, lng);
+                  if (rest) {
+                    resolve(rest);
+                    return;
+                  }
+                } catch {
+                  // ignore
+                }
                 reject(new Error(`Reverse geocoding failed: ${message}`));
               }
             };
@@ -256,6 +276,50 @@ export class BingMapsAdapter extends BaseAdapter {
         reject(new Error(`Reverse geocoding initialization error: ${err.message}`));
       }
     });
+  }
+
+  async _bingRestGeocode(address) {
+    try {
+      const url = `https://dev.virtualearth.net/REST/v1/Locations?q=${encodeURIComponent(address)}&maxResults=1&key=${this.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const resourceSets = data && data.resourceSets;
+      if (resourceSets && resourceSets.length > 0 && resourceSets[0].resources && resourceSets[0].resources.length > 0) {
+        const r = resourceSets[0].resources[0];
+        const coords = r.point && r.point.coordinates;
+        if (coords && coords.length >= 2) {
+          return {
+            lat: coords[0],
+            lng: coords[1],
+            formattedAddress: r.address && (r.address.formattedAddress || r.name) || address
+          };
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async _bingRestReverseGeocode(lat, lng) {
+    try {
+      const url = `https://dev.virtualearth.net/REST/v1/Locations/${lat},${lng}?key=${this.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const resourceSets = data && data.resourceSets;
+      if (resourceSets && resourceSets.length > 0 && resourceSets[0].resources && resourceSets[0].resources.length > 0) {
+        const r = resourceSets[0].resources[0];
+        return {
+          formattedAddress: (r.address && r.address.formattedAddress) || r.name || `${lat},${lng}`,
+          components: r.address || {}
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   drawRoute(coords, options = {}) {
