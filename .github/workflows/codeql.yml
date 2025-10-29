@@ -28,6 +28,14 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
@@ -40,13 +48,22 @@ jobs:
       if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        npm ci
-        # Use the project's build command
+        if [ -f package-lock.json ]; then
+          npm ci
+        else
+          npm install
+        fi
+        # Use the project's build command (fallbacks to build:mini)
         if npm run build --silent; then
           echo "Build succeeded"
         else
-          echo "Build failed or no build script found; aborting to avoid invalid CodeQL upload" >&2
-          exit 1
+          echo "Primary build failed or not defined. Trying 'build:mini'..."
+          if npm run build:mini --silent; then
+            echo "Fallback build:mini succeeded"
+          else
+            echo "Build failed or no build scripts found; aborting to avoid invalid CodeQL upload" >&2
+            exit 1
+          fi
         fi
 
     - name: Perform CodeQL Analysis
