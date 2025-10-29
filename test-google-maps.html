@@ -268,7 +268,9 @@
         function clearMap() {
             if (map) {
                 const mapElement = document.getElementById('map');
-                mapElement.innerHTML = '';
+                while (mapElement.firstChild) {
+                    mapElement.removeChild(mapElement.firstChild);
+                }
                 map = null;
                 updateStatus('Map cleared', 'info');
                 log('Map cleared');

@@ -52,10 +52,20 @@ export class AzureMapsAdapter extends BaseAdapter {
   addMarker(options) {
     const markerId = this._generateId();
     
+    const escapeHtml = (str) => String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const safeText = escapeHtml(options.label || options.title || '');
+    const color = options.color || 'red';
+
     const marker = new atlas.HtmlMarker({
       position: [options.lng, options.lat],
-      htmlContent: `<div style="color: ${options.color || 'red'}; font-weight: bold;">${options.label || options.title || ''}</div>`,
-      popup: options.title ? new atlas.Popup({ content: options.title }) : null
+      htmlContent: `<div style="color: ${color}; font-weight: bold;">${safeText}</div>`,
+      popup: options.title ? new atlas.Popup({ content: escapeHtml(options.title) }) : null
     });
 
     this.map.markers.add(marker);
@@ -81,7 +91,13 @@ export class AzureMapsAdapter extends BaseAdapter {
         marker.setOptions({ position: [options.position.lng, options.position.lat] });
       }
       if (options.title !== undefined) {
-        marker.setPopup(new atlas.Popup({ content: options.title }));
+        const escapeHtml = (str) => String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        marker.setPopup(new atlas.Popup({ content: escapeHtml(options.title) }));
       }
       return true;
     }
@@ -448,7 +464,9 @@ export class AzureMapsAdapter extends BaseAdapter {
     
     const container = this.getContainer();
     if (container) {
-      container.innerHTML = '';
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
     }
     this.map = null;
   }

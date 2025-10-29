@@ -573,7 +573,9 @@ export class GoogleMapsAdapter extends BaseAdapter {
 
     const container = this.getContainer();
     if (container) {
-      container.innerHTML = '';
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
     }
 
     this.map = null;

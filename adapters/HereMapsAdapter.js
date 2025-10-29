@@ -420,7 +420,11 @@ export class HereMapsAdapter extends BaseAdapter {
     this.layers.clear();
     
     const container = this.getContainer();
-    if (container) container.innerHTML = '';
+    if (container) {
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+    }
     
     this.map = null;
     this.platform = null;

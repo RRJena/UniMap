@@ -68,8 +68,14 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     });
 
     if (options.title) {
+      const escapeHtml = (str) => String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
       const infoWindow = new mappls.InfoWindow({
-        content: options.title
+        content: escapeHtml(options.title)
       });
       marker.addListener('click', () => {
         infoWindow.open(this.map, marker);
@@ -478,7 +484,11 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     if (this.map) {
       // MapmyIndia doesn't have a destroy method, just clear
       const container = this.getContainer();
-      if (container) container.innerHTML = '';
+      if (container) {
+        while (container.firstChild) {
+          container.removeChild(container.firstChild);
+        }
+      }
       this.map = null;
     }
   }
