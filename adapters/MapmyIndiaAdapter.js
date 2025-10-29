@@ -59,32 +59,48 @@ export class MapmyIndiaAdapter extends BaseAdapter {
   }
 
   addMarker(options) {
+    if (!options) {
+      throw new Error('addMarker requires options object with lat and lng properties');
+    }
+
+    // Normalize coordinates - handle both number and string inputs
+    const lat = typeof options.lat === 'number' ? options.lat : parseFloat(options.lat);
+    const lng = typeof options.lng === 'number' ? options.lng : parseFloat(options.lng);
+
+    if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+      throw new Error(`addMarker requires valid numeric lat and lng properties. Received: lat=${options.lat}, lng=${options.lng}`);
+    }
+
     const markerId = this._generateId();
     
     // Mappls uses {lng, lat} format (longitude FIRST)
-    const marker = new mappls.Marker({
-      map: this.map,
-      position: {lng: options.lng, lat: options.lat}
-    });
+    try {
+      const marker = new mappls.Marker({
+        map: this.map,
+        position: {lng: lng, lat: lat}
+      });
 
-    if (options.title) {
-      const escapeHtml = (str) => String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-      const infoWindow = new mappls.InfoWindow({
-        content: escapeHtml(options.title)
-      });
-      marker.addListener('click', () => {
-        infoWindow.open(this.map, marker);
-      });
+      if (options.title) {
+        const escapeHtml = (str) => String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        const infoWindow = new mappls.InfoWindow({
+          content: escapeHtml(options.title)
+        });
+        marker.addListener('click', () => {
+          infoWindow.open(this.map, marker);
+        });
+      }
+
+      this.markers.set(markerId, marker);
+      
+      return markerId;
+    } catch (error) {
+      throw new Error(`Failed to add marker: ${error.message || 'Invalid coordinates format. MapmyIndia expects position as {lng, lat} object.'}`);
     }
-
-    this.markers.set(markerId, marker);
-    
-    return markerId;
   }
 
   removeMarker(markerId) {
