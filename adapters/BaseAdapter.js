@@ -23,6 +23,18 @@ export class BaseAdapter {
     throw new Error('addMarker() method must be implemented by the adapter');
   }
 
+  addCustomMarker(options) {
+    throw new Error('addCustomMarker() method must be implemented by the adapter');
+  }
+
+  addCustomMarkers(markersArray) {
+    throw new Error('addCustomMarkers() method must be implemented by the adapter');
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    throw new Error('onMarkerClick() method must be implemented by the adapter');
+  }
+
   removeMarker(markerId) {
     throw new Error('removeMarker() method must be implemented by the adapter');
   }

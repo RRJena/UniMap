@@ -91,10 +91,126 @@ export class BingMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    const location = new Microsoft.Maps.Location(options.lat, options.lng);
+
+    if (options.html) {
+      const overlay = new Microsoft.Maps.CustomOverlay({
+        htmlContent: options.html,
+        position: location
+      });
+      this.map.layers.insert(overlay);
+      this.markers.set(markerId, overlay);
+      return markerId;
+    }
+
+    const pushpinOptions = {
+      title: options.title || '',
+      text: options.label || '',
+      draggable: options.draggable || false
+    };
+
+    if (options.iconUrl) {
+      pushpinOptions.icon = options.iconUrl;
+    } else if (options.color) {
+      pushpinOptions.color = options.color;
+    }
+
+    const pushpin = new Microsoft.Maps.Pushpin(location, pushpinOptions);
+    this.map.entities.push(pushpin);
+    this.markers.set(markerId, pushpin);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    Microsoft.Maps.Events.addHandler(marker, 'click', (e) => {
+      const location = marker.getLocation ? marker.getLocation() : marker.position;
+      const data = { lat: location.latitude, lng: location.longitude, markerId, event: e };
+
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        const infobox = new Microsoft.Maps.Infobox(location, {
+          description: options.popupHtml,
+          visible: true
+        });
+        this.map.entities.push(infobox);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    });
+
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
-      this.map.entities.remove(marker);
+      if (marker instanceof Microsoft.Maps.CustomOverlay) {
+        this.map.layers.remove(marker);
+      } else {
+        this.map.entities.remove(marker);
+      }
       this.markers.delete(markerId);
       return true;
     }
@@ -103,16 +219,38 @@ export class BingMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setLocation(new Microsoft.Maps.Location(options.position.lat, options.position.lng));
-      }
-      if (options.title !== undefined) marker.setTitle(options.title);
-      if (options.text !== undefined) marker.setText(options.text);
-      if (options.color !== undefined) marker.setColor(options.color);
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Bing Maps marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setLocation(new Microsoft.Maps.Location(lat, lng));
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined && typeof marker.setTitle === 'function') {
+      marker.setTitle(options.title);
+    }
+    if (options.text !== undefined && typeof marker.setText === 'function') {
+      marker.setText(options.text);
+    }
+    if (options.color !== undefined && typeof marker.setColor === 'function') {
+      marker.setColor(options.color);
+    }
+    
+    return true;
   }
 
   setCenter(coords) {

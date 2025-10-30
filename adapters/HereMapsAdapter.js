@@ -89,9 +89,130 @@ export class HereMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    let marker;
+    if (options.html) {
+      // Custom HTML marker using DOMIcon
+      const el = document.createElement('div');
+      // eslint-disable-next-line no-restricted-syntax
+      el.innerHTML = options.html;
+      el.style.cursor = 'pointer';
+      
+      const icon = new H.map.DomIcon(el);
+      marker = new H.map.DomMarker({ lat: options.lat, lng: options.lng }, { icon });
+    } else if (options.iconUrl) {
+      // Custom icon
+      const icon = new H.map.Icon(options.iconUrl, {
+        size: options.iconSize ? { w: options.iconSize.width || 32, h: options.iconSize.height || 32 } : { w: 32, h: 32 }
+      });
+      marker = new H.map.Marker({ lat: options.lat, lng: options.lng }, { icon });
+    } else {
+      marker = new H.map.Marker({ lat: options.lat, lng: options.lng });
+    }
+    
+    if (options.title) {
+      marker.setData(options.title);
+    }
+
+    this.map.addObject(marker);
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = (e) => {
+      const position = marker.getGeometry();
+      const data = { lat: position.lat, lng: position.lng, markerId, event: e };
+      
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        const bubble = new H.ui.InfoBubble(position, {
+          content: options.popupHtml
+        });
+        this.ui.addBubble(bubble);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.addEventListener('tap', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
+      if (this.markerClickHandlers) {
+        marker.removeEventListener('tap', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       this.map.removeObject(marker);
       this.markers.delete(markerId);
       return true;
@@ -101,14 +222,36 @@ export class HereMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setGeometry({ lat: options.position.lat, lng: options.position.lng });
-      }
-      if (options.title !== undefined) marker.setData(options.title);
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for HERE Maps marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setGeometry({ lat: lat, lng: lng });
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
+        marker.setData(options.title);
+      } catch (error) {
+        console.error('Failed to update marker data:', error.message);
+      }
+    }
+    
+    return true;
   }
 
   setCenter(coords) {

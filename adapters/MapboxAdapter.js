@@ -116,11 +116,143 @@ export class MapboxAdapter extends BaseAdapter {
     }
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    // Support custom HTML content
+    const el = document.createElement('div');
+    if (options.html) {
+      // eslint-disable-next-line no-restricted-syntax
+      el.innerHTML = options.html;
+    } else {
+      el.className = options.className || 'mapbox-marker';
+      if (options.iconUrl) {
+        // Note: iconUrl is used directly in CSS - ensure it's from a trusted source to prevent XSS
+        el.style.backgroundImage = `url(${options.iconUrl})`;
+        el.style.backgroundSize = 'cover';
+        el.style.width = (options.iconSize?.width || 32) + 'px';
+        el.style.height = (options.iconSize?.height || 32) + 'px';
+      } else {
+        el.style.width = (options.iconSize?.width || 20) + 'px';
+        el.style.height = (options.iconSize?.height || 20) + 'px';
+        el.style.backgroundColor = options.color || '#FF0000';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+      }
+    }
+    
+    el.style.cursor = 'pointer';
+    if (options.title) {
+      el.setAttribute('title', options.title);
+    }
+
+    try {
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([options.lng, options.lat])
+        .addTo(this.map);
+
+      this.markers.set(markerId, marker);
+      return markerId;
+    } catch (error) {
+      throw new Error(`Failed to add custom marker: ${error.message}`);
+    }
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = () => {
+      const lngLat = marker.getLngLat();
+      const data = { lat: lngLat.lat, lng: lngLat.lng, markerId };
+
+      if (callback) {
+        callback(data);
+      }
+
+      // Show popup if HTML content provided
+      if (options.popupHtml) {
+        new mapboxgl.Popup({ offset: 25 })
+          .setLngLat([lngLat.lng, lngLat.lat])
+          .setHTML(options.popupHtml)
+          .addTo(this.map);
+      }
+
+      // Show toast notification
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.getElement().addEventListener('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       marker.remove();
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -128,19 +260,33 @@ export class MapboxAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
-        const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
-        
-        if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
-          throw new Error('updateMarker position must have valid numeric lat and lng properties');
-        }
-        marker.setLngLat([lng, lat]);
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Mapbox marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setLngLat([lng, lat]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined || options.label !== undefined) {
+      // Mapbox markers don't directly support title/label updates - these are part of HTML content
+      console.warn('Mapbox custom markers: title and label updates require recreating the marker with new HTML content.');
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -216,11 +362,12 @@ export class MapboxAdapter extends BaseAdapter {
 
   async reverseGeocode(lat, lng) {
     if (!this._validateCoordinates(lat, lng)) {
-      return Promise.reject('Invalid coordinates');
+      return Promise.reject(new Error('Invalid coordinates'));
     }
 
+    // Encode coordinates in URL path to prevent injection (already validated, but encoding is safer)
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${this.apiKey}&limit=1`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(lng)},${encodeURIComponent(lat)}.json?access_token=${this.apiKey}&limit=1`
     );
     
     if (!response.ok) {

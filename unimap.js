@@ -1,4 +1,4 @@
-// Version: 2.2.7 - MapmyIndia Support
+// Version: 2.2.11 - Custom Markers & Enhanced Features
 import { SUPPORTED_PROVIDERS } from './utils/constants.js';
 import { throwIfMissing } from './utils/common.js';
 
@@ -69,6 +69,18 @@ export class UniMap {
 
   addMarker(options) {
     return this.adapter.addMarker(options);
+  }
+
+  addCustomMarker(options) {
+    return this.adapter.addCustomMarker(options);
+  }
+
+  addCustomMarkers(markersArray) {
+    return this.adapter.addCustomMarkers(markersArray);
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    return this.adapter.onMarkerClick(markerId, callback, options);
   }
 
   removeMarker(markerId) {

@@ -80,11 +80,137 @@ export class TomTomAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    let marker;
+    if (options.html) {
+      // Custom HTML marker
+      const el = document.createElement('div');
+      // eslint-disable-next-line no-restricted-syntax
+      el.innerHTML = options.html;
+      el.style.cursor = 'pointer';
+      
+      marker = new tt.Marker({ element: el }).setLngLat([options.lng, options.lat]);
+    } else if (options.iconUrl) {
+      // Custom icon
+      const el = document.createElement('div');
+      el.style.width = (options.iconSize?.width || 32) + 'px';
+      el.style.height = (options.iconSize?.height || 32) + 'px';
+      // Note: iconUrl is used directly in CSS - ensure it's from a trusted source to prevent XSS
+      el.style.backgroundImage = `url(${options.iconUrl})`;
+      el.style.backgroundSize = 'cover';
+      el.style.cursor = 'pointer';
+      
+      marker = new tt.Marker({ element: el }).setLngLat([options.lng, options.lat]);
+    } else {
+      marker = new tt.Marker().setLngLat([options.lng, options.lat]);
+    }
+    
+    if (options.title) {
+      const popup = new tt.Popup().setText(options.title);
+      marker.setPopup(popup);
+    }
+
+    marker.addTo(this.map);
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = () => {
+      const lngLat = marker.getLngLat();
+      const data = { lat: lngLat.lat, lng: lngLat.lng, markerId };
+
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        new tt.Popup({ offset: [0, -25] })
+          .setLngLat([lngLat.lng, lngLat.lat])
+          .setHTML(options.popupHtml)
+          .addTo(this.map);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.getElement().addEventListener('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+ restriction   `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       marker.remove();
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        marker.getElement().removeEventListener('click', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -92,21 +218,41 @@ export class TomTomAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setLngLat([options.position.lng, options.position.lat]);
+    if (!marker) {
+      return false;
+    }
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for TomTom marker update:', options.position);
+        return false;
       }
-      if (options.title !== undefined) {
+      
+      try {
+        marker.setLngLat([lng, lat]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
         if (options.title) {
           const popup = new tt.Popup().setText(options.title);
           marker.setPopup(popup);
         } else {
           marker.setPopup(null);
         }
+      } catch (error) {
+        console.error('Failed to update marker popup:', error.message);
       }
-      return true;
     }
-    return false;
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -156,6 +302,12 @@ export class TomTomAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
+      }
+      
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
@@ -181,6 +333,12 @@ export class TomTomAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Reverse geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
+      }
+      
       const data = await response.json();
       
       if (data.addresses && data.addresses.length > 0) {

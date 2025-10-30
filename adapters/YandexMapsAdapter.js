@@ -58,11 +58,156 @@ export class YandexMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    let placemark;
+    if (options.html) {
+      // Custom HTML marker using iconContent
+      placemark = new ymaps.Placemark(
+        [options.lat, options.lng],
+        {
+          balloonContent: options.title || '',
+          iconContent: options.html
+        },
+        {
+          preset: 'islands#blackStretchyIcon',
+          draggable: options.draggable || false
+        }
+      );
+    } else if (options.iconUrl) {
+      // Custom icon
+      placemark = new ymaps.Placemark(
+        [options.lat, options.lng],
+        {
+          balloonContent: options.title || '',
+          iconCaption: options.label || ''
+        },
+        {
+          iconLayout: 'default#image',
+          iconImageHref: options.iconUrl,
+          iconImageSize: options.iconSize ? [options.iconSize.width || 32, options.iconSize.height || 32] : [32, 32],
+          iconImageOffset: options.iconAnchor ? [-options.iconAnchor.x || -16, -options.iconAnchor.y || -16] : [-16, -16],
+          draggable: options.draggable || false
+        }
+      );
+    } else {
+      placemark = new ymaps.Placemark(
+        [options.lat, options.lng],
+        {
+          balloonContent: options.title || '',
+          iconCaption: options.label || ''
+        },
+        {
+          preset: 'islands#redDotIcon',
+          draggable: options.draggable || false
+        }
+      );
+    }
+
+    this.map.geoObjects.add(placemark);
+    if (!this.placemarks) {
+      this.placemarks = [];
+    }
+    this.placemarks.push(placemark);
+    this.markers.set(markerId, placemark);
+    
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = (e) => {
+      const coords = marker.geometry.getCoordinates();
+      const data = { lat: coords[0], lng: coords[1], markerId, event: e };
+      
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        marker.balloon.open(coords, {
+          contentBody: options.popupHtml
+        });
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.events.add('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       this.map.geoObjects.remove(marker);
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        marker.events.remove('click', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -70,16 +215,37 @@ export class YandexMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.geometry.setCoordinates([options.position.lat, options.position.lng]);
-      }
-      if (options.title !== undefined) {
-        marker.properties.set('balloonContent', options.title);
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Yandex Maps marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        // Yandex Maps uses [lat, lng] coordinate order
+        marker.geometry.setCoordinates([lat, lng]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
+        marker.properties.set('balloonContent', options.title);
+      } catch (error) {
+        console.error('Failed to update marker properties:', error.message);
+      }
+    }
+    
+    return true;
   }
 
   setCenter(coords) {

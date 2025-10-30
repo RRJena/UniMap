@@ -74,6 +74,115 @@ export class AzureMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    const escapeHtml = (str) => String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39; ');
+
+    let htmlContent;
+    if (options.html) {
+      htmlContent = options.html;
+    } else {
+      const safeText = escapeHtml(options.label || options.title || '');
+      const color = options.color || 'red';
+      htmlContent = `<div style="color: ${color}; font-weight: bold;">${safeText}</div>`;
+    }
+
+    const marker = new atlas.HtmlMarker({
+      position: [options.lng, options.lat],
+      htmlContent: htmlContent,
+      popup: options.title ? new atlas.Popup({ content: escapeHtml(options.title) }) : null
+    });
+
+    this.map.markers.add(marker);
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    this.map.events.add('click', marker, (e) => {
+      const position = marker.getOptions().position;
+      const data = { lat: position[1], lng: position[0], markerId, event: e };
+
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        const popup = new atlas.Popup({
+          content: options.popupHtml,
+          position: position
+        });
+        this.map.popups.add(popup);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    });
+
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
@@ -86,22 +195,42 @@ export class AzureMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setOptions({ position: [options.position.lng, options.position.lat] });
-      }
-      if (options.title !== undefined) {
-        const escapeHtml = (str) => String(str)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-        marker.setPopup(new atlas.Popup({ content: escapeHtml(options.title) }));
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Azure Maps marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setOptions({ position: [lng, lat] });
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      const escapeHtml = (str) => String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+      try {
+        marker.setPopup(new atlas.Popup({ content: escapeHtml(options.title) }));
+      } catch (error) {
+        console.error('Failed to update marker popup:', error.message);
+      }
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -218,7 +347,10 @@ export class AzureMapsAdapter extends BaseAdapter {
   }
 
   async getDirections(origin, destination, options = {}) {
-    const url = `https://atlas.microsoft.com/route/directions/json?api-version=1.0&subscription-key=${this.apiKey}&query=${origin.lat},${origin.lng}:${destination.lat},${destination.lng}&routeType=${options.travelMode || 'fastest'}`;
+    // Encode coordinates to prevent URL injection
+    const originStr = `${encodeURIComponent(origin.lat)},${encodeURIComponent(origin.lng)}`;
+    const destStr = `${encodeURIComponent(destination.lat)},${encodeURIComponent(destination.lng)}`;
+    const url = `https://atlas.microsoft.com/route/directions/json?api-version=1.0&subscription-key=${this.apiKey}&query=${originStr}:${destStr}&routeType=${encodeURIComponent(options.travelMode || 'fastest')}`;
     
     try {
       const response = await fetch(url);
