@@ -81,11 +81,131 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    // Mappls uses {lng, lat} format (longitude FIRST)
+    const markerOptions = {
+      map: this.map,
+      position: {lng: options.lng, lat: options.lat}
+    };
+
+    if (options.iconUrl) {
+      markerOptions.iconUrl = options.iconUrl;
+    }
+    if (options.html) {
+      markerOptions.htmlContent = options.html;
+    }
+
+    const marker = new mappls.Marker(markerOptions);
+
+    if (options.title) {
+      const infoWindow = new mappls.InfoWindow({
+        content: options.title
+      });
+      marker.addListener('click', () => {
+        infoWindow.open(this.map, marker);
+      });
+    }
+
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = () => {
+      const position = marker.getPosition();
+      const data = { lat: position.lat, lng: position.lng, markerId };
+
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        const infoWindow = new mappls.InfoWindow({
+          content: options.popupHtml
+        });
+        infoWindow.open(this.map, marker);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.addListener('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events:auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       marker.setMap(null);
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        marker.removeListener('click', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -93,16 +213,37 @@ export class MapmyIndiaAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setPosition({lng: options.position.lng, lat: options.position.lat});
-      }
-      if (options.title !== undefined) {
-        marker.setTitle(options.title);
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng) || !this._validateCoordinates(lat, lng)) {
+        console.error('Invalid position for MapmyIndia marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        // MapmyIndia uses {lng, lat} format (longitude FIRST)
+        marker.setPosition({ lng: lng, lat: lat });
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
+        marker.setTitle(options.title);
+      } catch (error) {
+        console.error('Failed to update marker title:', error.message);
+      }
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -171,7 +312,8 @@ export class MapmyIndiaAdapter extends BaseAdapter {
       return Promise.reject(new Error('Invalid coordinates'));
     }
 
-    const url = `https://apis.mapmyindia.com/advancedmaps/v1/${this.apiKey}/rev_geocode?lat=${lat}&lng=${lng}`;
+    // Encode coordinates to prevent URL injection
+    const url = `https://apis.mapmyindia.com/advancedmaps/v1/${this.apiKey}/rev_geocode?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
     
     try {
       const response = await fetch(url);
@@ -208,7 +350,10 @@ export class MapmyIndiaAdapter extends BaseAdapter {
   }
 
   async getDirections(origin, destination, options = {}) {
-    const url = `https://apis.mapmyindia.com/advancedmaps/v1/${this.apiKey}/route_adv/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=polyline&overview=full`;
+    // Encode coordinates to prevent URL injection
+    const originStr = `${encodeURIComponent(origin.lng)},${encodeURIComponent(origin.lat)}`;
+    const destStr = `${encodeURIComponent(destination.lng)},${encodeURIComponent(destination.lat)}`;
+    const url = `https://apis.mapmyindia.com/advancedmaps/v1/${this.apiKey}/route_adv/driving/${originStr};${destStr}?geometries=polyline&overview=full`;
     
     try {
       const response = await fetch(url);
@@ -478,7 +623,11 @@ export class MapmyIndiaAdapter extends BaseAdapter {
     if (this.map) {
       // MapmyIndia doesn't have a destroy method, just clear
       const container = this.getContainer();
-      if (container) container.innerHTML = '';
+      if (container) {
+        while (container.firstChild) {
+          container.removeChild(container.firstChild);
+        }
+      }
       this.map = null;
     }
   }

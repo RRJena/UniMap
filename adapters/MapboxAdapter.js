@@ -6,6 +6,7 @@ export class MapboxAdapter extends BaseAdapter {
     this.eventListeners = new Map();
     this.sources = new Map();
     this.layers = new Map();
+    this._isLoaded = false;
   }
 
   async init() {
@@ -16,6 +17,12 @@ export class MapboxAdapter extends BaseAdapter {
       throw new Error(`Container element with ID '${this.containerId}' not found.`);
     }
 
+    // Validate and set access token for Mapbox GL JS
+    if (!this.apiKey || typeof this.apiKey !== 'string') {
+      throw new Error('Mapbox access token is required');
+    }
+    mapboxgl.accessToken = this.apiKey;
+
     // Validate center coordinates
     const centerLat = typeof this.options.center?.lat === 'number' ? this.options.center.lat : 0;
     const centerLng = typeof this.options.center?.lng === 'number' ? this.options.center.lng : 0;
@@ -24,13 +31,31 @@ export class MapboxAdapter extends BaseAdapter {
       container: this.containerId,
       style: this.options.style || 'mapbox://styles/mapbox/streets-v11',
       center: [centerLng, centerLat],
-      zoom: this.options.zoom || 10,
-      accessToken: this.apiKey
+      zoom: this.options.zoom || 10
     });
 
     await new Promise((resolve) => {
-      this.map.on('load', resolve);
+      this.map.on('load', () => {
+        this._isLoaded = true;
+        resolve();
+      });
     });
+  }
+
+  isReady() {
+    if (!this.map) return false;
+    if (typeof this.map.isStyleLoaded === 'function') {
+      return this.map.isStyleLoaded();
+    }
+    return this._isLoaded;
+  }
+
+  executeWhenReady(callback) {
+    if (this.isReady()) {
+      callback();
+    } else {
+      this.map.once('load', callback);
+    }
   }
 
   loadMapboxScript() {
@@ -54,6 +79,15 @@ export class MapboxAdapter extends BaseAdapter {
   }
 
   addMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addMarker requires options with numeric lat and lng properties');
+    }
+
+    // Validate coordinates are valid numbers
+    if (!isFinite(options.lat) || !isFinite(options.lng)) {
+      throw new Error('addMarker requires valid numeric coordinates (lat and lng must be finite numbers)');
+    }
+
     const markerId = this._generateId();
     
     const el = document.createElement('div');
@@ -69,12 +103,146 @@ export class MapboxAdapter extends BaseAdapter {
       el.setAttribute('title', options.label);
     }
 
-    const marker = new mapboxgl.Marker(el)
-      .setLngLat([options.lng, options.lat])
-      .addTo(this.map);
+    // Mapbox expects [lng, lat] array format
+    try {
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([options.lng, options.lat])
+        .addTo(this.map);
 
-    this.markers.set(markerId, marker);
+      this.markers.set(markerId, marker);
+      return markerId;
+    } catch (error) {
+      throw new Error(`Failed to add marker: ${error.message || 'Invalid coordinates format. Mapbox expects [lng, lat] array.'}`);
+    }
+  }
+
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    // Support custom HTML content
+    const el = document.createElement('div');
+    if (options.html) {
+      // eslint-disable-next-line no-restricted-syntax
+      el.innerHTML = options.html;
+    } else {
+      el.className = options.className || 'mapbox-marker';
+      if (options.iconUrl) {
+        // Note: iconUrl is used directly in CSS - ensure it's from a trusted source to prevent XSS
+        el.style.backgroundImage = `url(${options.iconUrl})`;
+        el.style.backgroundSize = 'cover';
+        el.style.width = (options.iconSize?.width || 32) + 'px';
+        el.style.height = (options.iconSize?.height || 32) + 'px';
+      } else {
+        el.style.width = (options.iconSize?.width || 20) + 'px';
+        el.style.height = (options.iconSize?.height || 20) + 'px';
+        el.style.backgroundColor = options.color || '#FF0000';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+      }
+    }
+    
+    el.style.cursor = 'pointer';
+    if (options.title) {
+      el.setAttribute('title', options.title);
+    }
+
+    try {
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([options.lng, options.lat])
+        .addTo(this.map);
+
+      this.markers.set(markerId, marker);
+      return markerId;
+    } catch (error) {
+      throw new Error(`Failed to add custom marker: ${error.message}`);
+    }
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = () => {
+      const lngLat = marker.getLngLat();
+      const data = { lat: lngLat.lat, lng: lngLat.lng, markerId };
+
+      if (callback) {
+        callback(data);
+      }
+
+      // Show popup if HTML content provided
+      if (options.popupHtml) {
+        new mapboxgl.Popup({ offset: 25 })
+          .setLngLat([lngLat.lng, lngLat.lat])
+          .setHTML(options.popupHtml)
+          .addTo(this.map);
+      }
+
+      // Show toast notification
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.getElement().addEventListener('click', clickHandler);
     return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
   }
 
   removeMarker(markerId) {
@@ -82,6 +250,9 @@ export class MapboxAdapter extends BaseAdapter {
     if (marker) {
       marker.remove();
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -89,13 +260,33 @@ export class MapboxAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setLngLat([options.position.lng, options.position.lat]);
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Mapbox marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setLngLat([lng, lat]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined || options.label !== undefined) {
+      // Mapbox markers don't directly support title/label updates - these are part of HTML content
+      console.warn('Mapbox custom markers: title and label updates require recreating the marker with new HTML content.');
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -129,6 +320,9 @@ export class MapboxAdapter extends BaseAdapter {
   }
 
   panTo(coords) {
+    if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+      throw new Error('panTo requires coords with numeric lat and lng properties');
+    }
     if (this._validateCoordinates(coords.lat, coords.lng)) {
       this.map.panTo([coords.lng, coords.lat]);
     }
@@ -149,7 +343,8 @@ export class MapboxAdapter extends BaseAdapter {
     );
     
     if (!response.ok) {
-      throw new Error(`Geocoding failed: ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`Geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
     
     const data = await response.json();
@@ -167,15 +362,17 @@ export class MapboxAdapter extends BaseAdapter {
 
   async reverseGeocode(lat, lng) {
     if (!this._validateCoordinates(lat, lng)) {
-      return Promise.reject('Invalid coordinates');
+      return Promise.reject(new Error('Invalid coordinates'));
     }
 
+    // Encode coordinates in URL path to prevent injection (already validated, but encoding is safer)
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${this.apiKey}&limit=1`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(lng)},${encodeURIComponent(lat)}.json?access_token=${this.apiKey}&limit=1`
     );
     
     if (!response.ok) {
-      throw new Error(`Reverse geocoding failed: ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`Reverse geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
     
     const data = await response.json();
@@ -196,30 +393,35 @@ export class MapboxAdapter extends BaseAdapter {
 
     const coordinates = coords.map(coord => [coord.lng, coord.lat]);
 
-    this.map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates
-        }
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(sourceId)) {
+        this.map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: coordinates
+            }
+          }
+        });
       }
-    });
-
-    this.map.addLayer({
-      id: layerId,
-      type: 'line',
-      source: sourceId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 3,
-        'line-opacity': options.strokeOpacity || 1.0
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'line',
+          source: sourceId,
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': options.strokeColor || '#FF0000',
+            'line-width': options.strokeWeight || 3,
+            'line-opacity': options.strokeOpacity || 1.0
+          }
+        });
       }
     });
 
@@ -237,7 +439,8 @@ export class MapboxAdapter extends BaseAdapter {
     );
     
     if (!response.ok) {
-      throw new Error(`Directions failed: ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`Directions failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
     
     const data = await response.json();
@@ -257,36 +460,45 @@ export class MapboxAdapter extends BaseAdapter {
 
     const coordinates = coords.map(coord => [coord.lng, coord.lat]);
 
-    this.map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'Polygon',
-          coordinates: [coordinates]
-        }
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(sourceId)) {
+        this.map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [coordinates]
+            }
+          }
+        });
       }
-    });
 
-    this.map.addLayer({
-      id: layerId,
-      type: 'fill',
-      source: sourceId,
-      paint: {
-        'fill-color': options.fillColor || '#FF0000',
-        'fill-opacity': options.fillOpacity || 0.35
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'fill',
+          source: sourceId,
+          paint: {
+            'fill-color': options.fillColor || '#FF0000',
+            'fill-opacity': options.fillOpacity || 0.35
+          }
+        });
       }
-    });
 
-    this.map.addLayer({
-      id: `${layerId}-outline`,
-      type: 'line',
-      source: sourceId,
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 2,
-        'line-opacity': options.strokeOpacity || 0.8
+      const outlineId = `${layerId}-outline`;
+      if (!this.map.getLayer(outlineId)) {
+        this.map.addLayer({
+          id: outlineId,
+          type: 'line',
+          source: sourceId,
+          paint: {
+            'line-color': options.strokeColor || '#FF0000',
+            'line-width': options.strokeWeight || 2,
+            'line-opacity': options.strokeOpacity || 0.8
+          }
+        });
       }
     });
 
@@ -345,31 +557,36 @@ export class MapboxAdapter extends BaseAdapter {
       }
     }));
 
-    this.map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: features
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(sourceId)) {
+        this.map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: features
+          }
+        });
       }
-    });
-
-    this.map.addLayer({
-      id: layerId,
-      type: 'heatmap',
-      source: sourceId,
-      paint: {
-        'heatmap-weight': ['get', 'weight'],
-        'heatmap-intensity': options.intensity || 1,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0, 'rgba(0, 0, 255, 0)',
-          0.5, 'rgba(0, 0, 255, 1)',
-          1, 'rgba(255, 0, 0, 1)'
-        ],
-        'heatmap-radius': options.radius || 20,
-        'heatmap-opacity': options.opacity || 0.6
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'heatmap',
+          source: sourceId,
+          paint: {
+            'heatmap-weight': ['get', 'weight'],
+            'heatmap-intensity': options.intensity || 1,
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0, 'rgba(0, 0, 255, 0)',
+              0.5, 'rgba(0, 0, 255, 1)',
+              1, 'rgba(255, 0, 0, 1)'
+            ],
+            'heatmap-radius': options.radius || 20,
+            'heatmap-opacity': options.opacity || 0.6
+          }
+        });
       }
     });
 
@@ -381,18 +598,23 @@ export class MapboxAdapter extends BaseAdapter {
   addTileLayer(url, options = {}) {
     const layerId = this._generateId();
     
-    this.map.addSource(layerId, {
-      type: 'raster',
-      tiles: [url],
-      tileSize: options.tileSize || 256
-    });
-
-    this.map.addLayer({
-      id: layerId,
-      type: 'raster',
-      source: layerId,
-      paint: {
-        'raster-opacity': options.opacity || 1.0
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(layerId)) {
+        this.map.addSource(layerId, {
+          type: 'raster',
+          tiles: [url],
+          tileSize: options.tileSize || 256
+        });
+      }
+      if (!this.map.getLayer(layerId)) {
+        this.map.addLayer({
+          id: layerId,
+          type: 'raster',
+          source: layerId,
+          paint: {
+            'raster-opacity': options.opacity || 1.0
+          }
+        });
       }
     });
 

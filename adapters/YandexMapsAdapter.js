@@ -5,8 +5,6 @@ export class YandexMapsAdapter extends BaseAdapter {
     super(apiKey, containerId, options);
     this.eventListeners = new Map();
     this.placemarks = [];
-    this.polylines = [];
-    this.polygons = [];
   }
 
   async init() {
@@ -60,11 +58,156 @@ export class YandexMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    let placemark;
+    if (options.html) {
+      // Custom HTML marker using iconContent
+      placemark = new ymaps.Placemark(
+        [options.lat, options.lng],
+        {
+          balloonContent: options.title || '',
+          iconContent: options.html
+        },
+        {
+          preset: 'islands#blackStretchyIcon',
+          draggable: options.draggable || false
+        }
+      );
+    } else if (options.iconUrl) {
+      // Custom icon
+      placemark = new ymaps.Placemark(
+        [options.lat, options.lng],
+        {
+          balloonContent: options.title || '',
+          iconCaption: options.label || ''
+        },
+        {
+          iconLayout: 'default#image',
+          iconImageHref: options.iconUrl,
+          iconImageSize: options.iconSize ? [options.iconSize.width || 32, options.iconSize.height || 32] : [32, 32],
+          iconImageOffset: options.iconAnchor ? [-options.iconAnchor.x || -16, -options.iconAnchor.y || -16] : [-16, -16],
+          draggable: options.draggable || false
+        }
+      );
+    } else {
+      placemark = new ymaps.Placemark(
+        [options.lat, options.lng],
+        {
+          balloonContent: options.title || '',
+          iconCaption: options.label || ''
+        },
+        {
+          preset: 'islands#redDotIcon',
+          draggable: options.draggable || false
+        }
+      );
+    }
+
+    this.map.geoObjects.add(placemark);
+    if (!this.placemarks) {
+      this.placemarks = [];
+    }
+    this.placemarks.push(placemark);
+    this.markers.set(markerId, placemark);
+    
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = (e) => {
+      const coords = marker.geometry.getCoordinates();
+      const data = { lat: coords[0], lng: coords[1], markerId, event: e };
+      
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        marker.balloon.open(coords, {
+          contentBody: options.popupHtml
+        });
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.events.add('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       this.map.geoObjects.remove(marker);
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        marker.events.remove('click', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -72,16 +215,37 @@ export class YandexMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.geometry.setCoordinates([options.position.lat, options.position.lng]);
-      }
-      if (options.title !== undefined) {
-        marker.properties.set('balloonContent', options.title);
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Yandex Maps marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        // Yandex Maps uses [lat, lng] coordinate order
+        marker.geometry.setCoordinates([lat, lng]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
+        marker.properties.set('balloonContent', options.title);
+      } catch (error) {
+        console.error('Failed to update marker properties:', error.message);
+      }
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -125,23 +289,60 @@ export class YandexMapsAdapter extends BaseAdapter {
   }
 
   async geocode(address) {
-    return new Promise((resolve, reject) => {
-      ymaps.geocode(address).then((res) => {
+    if (!address || typeof address !== 'string' || address.trim() === '') {
+      return Promise.reject(new Error('Address must be a non-empty string'));
+    }
+
+    // Try JavaScript API first, fallback to REST API
+    try {
+      if (window.ymaps && window.ymaps.geocode) {
+        const res = await ymaps.geocode(address.trim(), { results: 1 });
         const firstGeoObject = res.geoObjects.get(0);
         if (firstGeoObject) {
           const coords = firstGeoObject.geometry.getCoordinates();
-          resolve({
+          return {
             lat: coords[0],
             lng: coords[1],
             formattedAddress: firstGeoObject.getAddressLine()
-          });
-        } else {
-          reject(new Error('No results found'));
+          };
         }
-      }).catch((error) => {
-        reject(new Error(`Geocoding failed: ${error.message}`));
-      });
-    });
+      }
+    } catch {
+      // Fall through to REST API
+    }
+
+    // Fallback to REST API
+    try {
+      const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${this.apiKey}&geocode=${encodeURIComponent(address.trim())}&format=json&results=1`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`HTTP 403 Forbidden - API key may be invalid or missing geocoding permissions. ${errorText ? `Details: ${errorText}` : 'Please check your Yandex Maps API key configuration.'}`);
+        }
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+      }
+
+      const data = await response.json();
+      const geoObjects = data?.response?.GeoObjectCollection?.featureMember;
+      
+      if (geoObjects && geoObjects.length > 0) {
+        const geoObject = geoObjects[0].GeoObject;
+        const pos = geoObject.Point.pos.split(' ');
+        return {
+          lat: parseFloat(pos[1]),
+          lng: parseFloat(pos[0]),
+          formattedAddress: geoObject.metaDataProperty?.GeocoderMetaData?.text || geoObject.name || address
+        };
+      }
+      
+      throw new Error('No results found');
+    } catch (error) {
+      const message = error && error.message ? error.message : 'Unknown geocoding error';
+      throw new Error(`Geocoding failed: ${message}`);
+    }
   }
 
   async reverseGeocode(lat, lng) {
@@ -149,21 +350,52 @@ export class YandexMapsAdapter extends BaseAdapter {
       return Promise.reject(new Error('Invalid coordinates'));
     }
 
-    return new Promise((resolve, reject) => {
-      ymaps.geocode([lat, lng]).then((res) => {
+    // Try JavaScript API first, fallback to REST API
+    try {
+      if (window.ymaps && window.ymaps.geocode) {
+        const res = await ymaps.geocode([lat, lng], { results: 1 });
         const firstGeoObject = res.geoObjects.get(0);
         if (firstGeoObject) {
-          resolve({
+          return {
             formattedAddress: firstGeoObject.getAddressLine(),
             components: {}
-          });
-        } else {
-          reject(new Error('No results found'));
+          };
         }
-      }).catch((error) => {
-        reject(new Error(`Reverse geocoding failed: ${error.message}`));
-      });
-    });
+      }
+    } catch {
+      // Fall through to REST API
+    }
+
+    // Fallback to REST API
+    try {
+      const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${this.apiKey}&geocode=${lng},${lat}&format=json&results=1`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`HTTP 403 Forbidden - API key may be invalid or missing geocoding permissions. ${errorText ? `Details: ${errorText}` : 'Please check your Yandex Maps API key configuration.'}`);
+        }
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+      }
+
+      const data = await response.json();
+      const geoObjects = data?.response?.GeoObjectCollection?.featureMember;
+      
+      if (geoObjects && geoObjects.length > 0) {
+        const geoObject = geoObjects[0].GeoObject;
+        return {
+          formattedAddress: geoObject.metaDataProperty?.GeocoderMetaData?.text || geoObject.name || `${lat},${lng}`,
+          components: {}
+        };
+      }
+      
+      throw new Error('No results found');
+    } catch (error) {
+      const message = error && error.message ? error.message : 'Unknown reverse geocoding error';
+      throw new Error(`Reverse geocoding failed: ${message}`);
+    }
   }
 
   drawRoute(coords, options = {}) {
@@ -180,7 +412,6 @@ export class YandexMapsAdapter extends BaseAdapter {
     );
 
     this.map.geoObjects.add(polyline);
-    this.polylines.push(polyline);
     this.polylines.set(routeId, polyline);
     
     return routeId;
@@ -188,20 +419,62 @@ export class YandexMapsAdapter extends BaseAdapter {
 
   async getDirections(origin, destination, options = {}) {
     return new Promise((resolve, reject) => {
-      ymaps.route([
-        [origin.lat, origin.lng],
-        [destination.lat, destination.lng]
-      ]).then((route) => {
-        const routeId = this.drawRoute([], options);
-        
-        resolve({
-          routeId,
-          duration: route.getJamsTime(),
-          distance: route.getLength()
+      if (!this._validateCoordinates(origin.lat, origin.lng) ||
+        !this._validateCoordinates(destination.lat, destination.lng)) {
+        return reject(new Error('Invalid origin or destination coordinates'));
+      }
+
+      try {
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: [
+            [origin.lat, origin.lng],
+            [destination.lat, destination.lng]
+          ],
+          params: {
+            routingMode: options.travelMode === 'walking' ? 'pedestrian' : 'auto'
+          }
+        }, {
+          boundsAutoApply: true
         });
-      }).catch((error) => {
-        reject(new Error(`Directions failed: ${error.message}`));
-      });
+
+        multiRoute.model.events.add('requestsuccess', () => {
+          const routes = multiRoute.getRoutes();
+          if (routes && routes.getLength() > 0) {
+            const route = routes.get(0);
+            const coordinates = [];
+            
+            route.getPaths().each((path) => {
+              path.getSegments().each((segment) => {
+                const coords = segment.getCoordinates();
+                coords.forEach(coord => coordinates.push({ lat: coord[0], lng: coord[1] }));
+              });
+            });
+
+            if (coordinates.length > 0) {
+              const routeId = this.drawRoute(coordinates, options);
+              resolve({
+                routeId,
+                duration: route.properties.get('duration').value || 0,
+                distance: route.properties.get('distance').value || 0
+              });
+            } else {
+              reject(new Error('No route path found'));
+            }
+          } else {
+            reject(new Error('No routes found'));
+          }
+        });
+
+        multiRoute.model.events.add('requesterror', (event) => {
+          const error = event.get('error');
+          const message = error && error.message ? error.message : 'Unknown routing error';
+          reject(new Error(`Directions failed: ${message}`));
+        });
+
+        this.map.geoObjects.add(multiRoute);
+      } catch (error) {
+        reject(new Error(`Directions failed: ${error.message || 'Unknown error'}`));
+      }
     });
   }
 
@@ -221,7 +494,6 @@ export class YandexMapsAdapter extends BaseAdapter {
     );
 
     this.map.geoObjects.add(polygon);
-    this.polygons.push(polygon);
     this.polygons.set(polygonId, polygon);
     
     return polygonId;
@@ -232,7 +504,6 @@ export class YandexMapsAdapter extends BaseAdapter {
   }
 
   drawCircle(center, radius, options = {}) {
-    const circleId = this._generateId();
     // Yandex doesn't have built-in circle, use polygon approximation
     const points = [];
     
@@ -391,7 +662,10 @@ export class YandexMapsAdapter extends BaseAdapter {
   }
 
   destroy() {
-    this.map.destroy();
+    if (this.map) {
+      this.map.geoObjects.removeAll();
+      this.map.destroy();
+    }
     this.markers.clear();
     this.polylines.clear();
     this.polygons.clear();

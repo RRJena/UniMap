@@ -91,10 +91,126 @@ export class BingMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    const location = new Microsoft.Maps.Location(options.lat, options.lng);
+
+    if (options.html) {
+      const overlay = new Microsoft.Maps.CustomOverlay({
+        htmlContent: options.html,
+        position: location
+      });
+      this.map.layers.insert(overlay);
+      this.markers.set(markerId, overlay);
+      return markerId;
+    }
+
+    const pushpinOptions = {
+      title: options.title || '',
+      text: options.label || '',
+      draggable: options.draggable || false
+    };
+
+    if (options.iconUrl) {
+      pushpinOptions.icon = options.iconUrl;
+    } else if (options.color) {
+      pushpinOptions.color = options.color;
+    }
+
+    const pushpin = new Microsoft.Maps.Pushpin(location, pushpinOptions);
+    this.map.entities.push(pushpin);
+    this.markers.set(markerId, pushpin);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    Microsoft.Maps.Events.addHandler(marker, 'click', (e) => {
+      const location = marker.getLocation ? marker.getLocation() : marker.position;
+      const data = { lat: location.latitude, lng: location.longitude, markerId, event: e };
+
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        const infobox = new Microsoft.Maps.Infobox(location, {
+          description: options.popupHtml,
+          visible: true
+        });
+        this.map.entities.push(infobox);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    });
+
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
-      this.map.entities.remove(marker);
+      if (marker instanceof Microsoft.Maps.CustomOverlay) {
+        this.map.layers.remove(marker);
+      } else {
+        this.map.entities.remove(marker);
+      }
       this.markers.delete(markerId);
       return true;
     }
@@ -103,16 +219,38 @@ export class BingMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setLocation(new Microsoft.Maps.Location(options.position.lat, options.position.lng));
-      }
-      if (options.title !== undefined) marker.setTitle(options.title);
-      if (options.text !== undefined) marker.setText(options.text);
-      if (options.color !== undefined) marker.setColor(options.color);
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for Bing Maps marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setLocation(new Microsoft.Maps.Location(lat, lng));
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined && typeof marker.setTitle === 'function') {
+      marker.setTitle(options.title);
+    }
+    if (options.text !== undefined && typeof marker.setText === 'function') {
+      marker.setText(options.text);
+    }
+    if (options.color !== undefined && typeof marker.setColor === 'function') {
+      marker.setColor(options.color);
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -174,47 +312,45 @@ export class BingMapsAdapter extends BaseAdapter {
       }, 30000);
 
       try {
-        // Load the Search module if not already loaded
         Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
           try {
-            // Create SearchManager instance
             const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
-            
-            const geocodeRequest = {
-              where: address,
-              callback: (geocodeResult) => {
+            const request = {
+              where: address.trim(),
+              callback: (result) => {
                 clearTimeout(timeout);
-                try {
-                  if (geocodeResult && geocodeResult.results && geocodeResult.results.length > 0) {
-                    const location = geocodeResult.results[0].location;
-                    resolve({
-                      lat: location.latitude,
-                      lng: location.longitude,
-                      formattedAddress: geocodeResult.results[0].address.formattedAddress
-                    });
-                  } else {
-                    reject(new Error('No results found'));
-                  }
-                } catch (err) {
-                  reject(new Error(`Geocoding callback error: ${err.message}`));
+                if (result && result.results && result.results.length > 0) {
+                  const best = result.results[0];
+                  resolve({
+                    lat: best.location.latitude,
+                    lng: best.location.longitude,
+                    formattedAddress: best.address?.formattedAddress || best.name || address
+                  });
+                } else {
+                  reject(new Error('No results found'));
                 }
               },
-              errorCallback: (error) => {
+              errorCallback: async (err) => {
                 clearTimeout(timeout);
-                const errorMsg = error && error.message ? error.message : 
-                               (typeof error === 'string' ? error : JSON.stringify(error));
-                reject(new Error(`Geocoding failed: ${errorMsg}`));
+                const message = (err && err.message) ? err.message : (err ? JSON.stringify(err) : 'Unknown geocoding error');
+                // Fallback to REST geocoding if client API fails
+                try {
+                  const rest = await this._bingRestGeocode(address);
+                  if (rest) {
+                    resolve(rest);
+                    return;
+                  }
+                } catch {
+                  // ignore, will fall through
+                }
+                reject(new Error(`Geocoding failed: ${message}`));
               }
             };
-            
-            searchManager.geocode(geocodeRequest);
+            searchManager.geocode(request);
           } catch (err) {
             clearTimeout(timeout);
             reject(new Error(`Geocoding setup error: ${err.message}`));
           }
-        }, (errorCallback) => {
-          clearTimeout(timeout);
-          reject(new Error(`Failed to load Bing Maps Search module: ${errorCallback}`));
         });
       } catch (err) {
         clearTimeout(timeout);
@@ -234,53 +370,94 @@ export class BingMapsAdapter extends BaseAdapter {
       }, 30000);
 
       try {
-        // Load the Search module if not already loaded
         Microsoft.Maps.loadModule('Microsoft.Maps.Search', () => {
           try {
-            // Create SearchManager instance
             const searchManager = new Microsoft.Maps.Search.SearchManager(this.map);
-            
             const location = new Microsoft.Maps.Location(lat, lng);
-            
-            const reverseGeocodeRequest = {
-              location: location,
-              callback: (reverseGeocodeResult) => {
+            const request = {
+              location,
+              callback: (result) => {
                 clearTimeout(timeout);
-                try {
-                  if (reverseGeocodeResult && reverseGeocodeResult.address) {
-                    resolve({
-                      formattedAddress: reverseGeocodeResult.address.formattedAddress,
-                      components: reverseGeocodeResult.address
-                    });
-                  } else {
-                    reject(new Error('No results found'));
-                  }
-                } catch (err) {
-                  reject(new Error(`Reverse geocoding callback error: ${err.message}`));
+                if (result && result.address) {
+                  resolve({
+                    formattedAddress: result.address.formattedAddress,
+                    components: result.address
+                  });
+                } else {
+                  reject(new Error('No results found'));
                 }
               },
-              errorCallback: (error) => {
+              errorCallback: async (err) => {
                 clearTimeout(timeout);
-                const errorMsg = error && error.message ? error.message : 
-                               (typeof error === 'string' ? error : JSON.stringify(error));
-                reject(new Error(`Reverse geocoding failed: ${errorMsg}`));
+                const message = (err && err.message) ? err.message : (err ? JSON.stringify(err) : 'Unknown reverse geocoding error');
+                // Fallback to REST reverse geocoding
+                try {
+                  const rest = await this._bingRestReverseGeocode(lat, lng);
+                  if (rest) {
+                    resolve(rest);
+                    return;
+                  }
+                } catch {
+                  // ignore
+                }
+                reject(new Error(`Reverse geocoding failed: ${message}`));
               }
             };
-            
-            searchManager.reverseGeocode(reverseGeocodeRequest);
+            searchManager.reverseGeocode(request);
           } catch (err) {
             clearTimeout(timeout);
             reject(new Error(`Reverse geocoding setup error: ${err.message}`));
           }
-        }, (errorCallback) => {
-          clearTimeout(timeout);
-          reject(new Error(`Failed to load Bing Maps Search module: ${errorCallback}`));
         });
       } catch (err) {
         clearTimeout(timeout);
         reject(new Error(`Reverse geocoding initialization error: ${err.message}`));
       }
     });
+  }
+
+  async _bingRestGeocode(address) {
+    try {
+      const url = `https://dev.virtualearth.net/REST/v1/Locations?q=${encodeURIComponent(address)}&maxResults=1&key=${this.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const resourceSets = data && data.resourceSets;
+      if (resourceSets && resourceSets.length > 0 && resourceSets[0].resources && resourceSets[0].resources.length > 0) {
+        const r = resourceSets[0].resources[0];
+        const coords = r.point && r.point.coordinates;
+        if (coords && coords.length >= 2) {
+          return {
+            lat: coords[0],
+            lng: coords[1],
+            formattedAddress: r.address && (r.address.formattedAddress || r.name) || address
+          };
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async _bingRestReverseGeocode(lat, lng) {
+    try {
+      const url = `https://dev.virtualearth.net/REST/v1/Locations/${lat},${lng}?key=${this.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const resourceSets = data && data.resourceSets;
+      if (resourceSets && resourceSets.length > 0 && resourceSets[0].resources && resourceSets[0].resources.length > 0) {
+        const r = resourceSets[0].resources[0];
+        return {
+          formattedAddress: (r.address && r.address.formattedAddress) || r.name || `${lat},${lng}`,
+          components: r.address || {}
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   drawRoute(coords, options = {}) {
@@ -656,7 +833,9 @@ export class BingMapsAdapter extends BaseAdapter {
 
     const container = this.getContainer();
     if (container) {
-      container.innerHTML = '';
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
     }
 
     this.map = null;

@@ -4,6 +4,7 @@ export class TomTomAdapter extends BaseAdapter {
   constructor(apiKey, containerId, options = {}) {
     super(apiKey, containerId, options);
     this.eventListeners = new Map();
+    this._isLoaded = false;
   }
 
   async init() {
@@ -24,6 +25,24 @@ export class TomTomAdapter extends BaseAdapter {
       center: [centerLng, centerLat],
       zoom: this.options.zoom || 10
     });
+    await new Promise((resolve) => {
+      this.map.on('load', () => {
+        this._isLoaded = true;
+        resolve();
+      });
+    });
+  }
+
+  isReady() {
+    return !!this._isLoaded;
+  }
+
+  executeWhenReady(callback) {
+    if (this.isReady()) {
+      callback();
+    } else {
+      this.map.once('load', callback);
+    }
   }
 
   loadTomTomScript() {
@@ -61,11 +80,137 @@ export class TomTomAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    let marker;
+    if (options.html) {
+      // Custom HTML marker
+      const el = document.createElement('div');
+      // eslint-disable-next-line no-restricted-syntax
+      el.innerHTML = options.html;
+      el.style.cursor = 'pointer';
+      
+      marker = new tt.Marker({ element: el }).setLngLat([options.lng, options.lat]);
+    } else if (options.iconUrl) {
+      // Custom icon
+      const el = document.createElement('div');
+      el.style.width = (options.iconSize?.width || 32) + 'px';
+      el.style.height = (options.iconSize?.height || 32) + 'px';
+      // Note: iconUrl is used directly in CSS - ensure it's from a trusted source to prevent XSS
+      el.style.backgroundImage = `url(${options.iconUrl})`;
+      el.style.backgroundSize = 'cover';
+      el.style.cursor = 'pointer';
+      
+      marker = new tt.Marker({ element: el }).setLngLat([options.lng, options.lat]);
+    } else {
+      marker = new tt.Marker().setLngLat([options.lng, options.lat]);
+    }
+    
+    if (options.title) {
+      const popup = new tt.Popup().setText(options.title);
+      marker.setPopup(popup);
+    }
+
+    marker.addTo(this.map);
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = () => {
+      const lngLat = marker.getLngLat();
+      const data = { lat: lngLat.lat, lng: lngLat.lng, markerId };
+
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        new tt.Popup({ offset: [0, -25] })
+          .setLngLat([lngLat.lng, lngLat.lat])
+          .setHTML(options.popupHtml)
+          .addTo(this.map);
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.getElement().addEventListener('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+ restriction   `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       marker.remove();
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        marker.getElement().removeEventListener('click', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -73,21 +218,41 @@ export class TomTomAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setLngLat([options.position.lng, options.position.lat]);
+    if (!marker) {
+      return false;
+    }
+
+    if (options.position) {
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for TomTom marker update:', options.position);
+        return false;
       }
-      if (options.title !== undefined) {
+      
+      try {
+        marker.setLngLat([lng, lat]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
         if (options.title) {
           const popup = new tt.Popup().setText(options.title);
           marker.setPopup(popup);
         } else {
           marker.setPopup(null);
         }
+      } catch (error) {
+        console.error('Failed to update marker popup:', error.message);
       }
-      return true;
     }
-    return false;
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -137,6 +302,12 @@ export class TomTomAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
+      }
+      
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
@@ -162,6 +333,12 @@ export class TomTomAdapter extends BaseAdapter {
     
     try {
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Reverse geocoding failed: ${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
+      }
+      
       const data = await response.json();
       
       if (data.addresses && data.addresses.length > 0) {
@@ -186,22 +363,23 @@ export class TomTomAdapter extends BaseAdapter {
         coordinates: coords.map(c => [c.lng, c.lat])
       }
     };
-
-    this.map.addLayer({
-      id: routeId,
-      type: 'line',
-      source: {
-        type: 'geojson',
-        data: geojson
-      },
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 3
-      }
+    this.executeWhenReady(() => {
+      this.map.addLayer({
+        id: routeId,
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: geojson
+        },
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': options.strokeColor || '#FF0000',
+          'line-width': options.strokeWeight || 3
+        }
+      });
     });
     
     this.polylines.set(routeId, geojson);
@@ -239,38 +417,48 @@ export class TomTomAdapter extends BaseAdapter {
   drawPolygon(coords, options = {}) {
     const polygonId = this._generateId();
     
+    const ring = coords.map(c => [c.lng, c.lat]);
+    if (ring.length > 0) {
+      const first = ring[0];
+      const last = ring[ring.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        ring.push([first[0], first[1]]);
+      }
+    }
+
     const geojson = {
       type: 'Feature',
       geometry: {
         type: 'Polygon',
-        coordinates: [[...coords.map(c => [c.lng, c.lat]), coords[0].lng, coords[0].lat]]
+        coordinates: [ring]
       }
     };
+    this.executeWhenReady(() => {
+      this.map.addLayer({
+        id: polygonId,
+        type: 'fill',
+        source: {
+          type: 'geojson',
+          data: geojson
+        },
+        paint: {
+          'fill-color': options.fillColor || '#FF0000',
+          'fill-opacity': options.fillOpacity || 0.35
+        }
+      });
 
-    this.map.addLayer({
-      id: polygonId,
-      type: 'fill',
-      source: {
-        type: 'geojson',
-        data: geojson
-      },
-      paint: {
-        'fill-color': options.fillColor || '#FF0000',
-        'fill-opacity': options.fillOpacity || 0.35
-      }
-    });
-
-    this.map.addLayer({
-      id: polygonId + '-outline',
-      type: 'line',
-      source: {
-        type: 'geojson',
-        data: geojson
-      },
-      paint: {
-        'line-color': options.strokeColor || '#FF0000',
-        'line-width': options.strokeWeight || 2
-      }
+      this.map.addLayer({
+        id: polygonId + '-outline',
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: geojson
+        },
+        paint: {
+          'line-color': options.strokeColor || '#FF0000',
+          'line-width': options.strokeWeight || 2
+        }
+      });
     });
     
     this.polygons.set(polygonId, geojson);
@@ -283,7 +471,6 @@ export class TomTomAdapter extends BaseAdapter {
 
   drawCircle(center, radius, options = {}) {
     // Approximate circle as a polygon
-    const circleId = this._generateId();
     const points = [];
     
     for (let i = 0; i < 64; i++) {
@@ -346,33 +533,37 @@ export class TomTomAdapter extends BaseAdapter {
         }
       }))
     };
-
-    this.map.addSource(heatmapId, {
-      type: 'geojson',
-      data: geojson
-    });
-
-    this.map.addLayer({
-      id: heatmapId,
-      type: 'heatmap',
-      source: heatmapId,
-      maxzoom: 15,
-      paint: {
-        'heatmap-weight': options.weight || 1,
-        'heatmap-intensity': options.intensity || 1,
-        'heatmap-color': [
-          'interpolate',
-          ['linear'],
-          ['heatmap-density'],
-          0, 'rgba(33,102,172,0)',
-          0.2, 'rgb(103,169,207)',
-          0.4, 'rgb(209,229,240)',
-          0.6, 'rgb(253,219,199)',
-          0.8, 'rgb(239,138,98)',
-          1, 'rgb(178,24,43)'
-        ],
-        'heatmap-radius': options.radius || 20,
-        'heatmap-opacity': options.opacity || 0.6
+    this.executeWhenReady(() => {
+      if (!this.map.getSource(heatmapId)) {
+        this.map.addSource(heatmapId, {
+          type: 'geojson',
+          data: geojson
+        });
+      }
+      if (!this.map.getLayer(heatmapId)) {
+        this.map.addLayer({
+          id: heatmapId,
+          type: 'heatmap',
+          source: heatmapId,
+          maxzoom: 15,
+          paint: {
+            'heatmap-weight': options.weight || 1,
+            'heatmap-intensity': options.intensity || 1,
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0, 'rgba(33,102,172,0)',
+              0.2, 'rgb(103,169,207)',
+              0.4, 'rgb(209,229,240)',
+              0.6, 'rgb(253,219,199)',
+              0.8, 'rgb(239,138,98)',
+              1, 'rgb(178,24,43)'
+            ],
+            'heatmap-radius': options.radius || 20,
+            'heatmap-opacity': options.opacity || 0.6
+          }
+        });
       }
     });
     
@@ -394,8 +585,9 @@ export class TomTomAdapter extends BaseAdapter {
       minzoom: options.minzoom || 0,
       maxzoom: options.maxzoom || 22
     };
-    
-    this.map.addLayer(tileLayer);
+    this.executeWhenReady(() => {
+      this.map.addLayer(tileLayer);
+    });
     this.layers.set(layerId, tileLayer);
     
     return layerId;
