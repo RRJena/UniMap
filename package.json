@@ -1,6 +1,6 @@
 {
   "name": "unimap",
-  "version": "2.2.11",
+  "version": "2.2.12",
   "description": "Unified mapping library for multiple map service providers - Google Maps, Mapbox, Bing Maps, OpenStreetMap, and more",
   "main": "unimap.js",
   "browser": "build/unimap.mini.js",
