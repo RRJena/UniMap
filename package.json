@@ -1,6 +1,6 @@
 {
   "name": "unimap",
-  "version": "2.2.11",
+  "version": "2.2.12",
   "description": "Unified mapping library for multiple map service providers - Google Maps, Mapbox, Bing Maps, OpenStreetMap, and more",
   "main": "unimap.js",
   "browser": "build/unimap.mini.js",
@@ -10,7 +10,8 @@
     "build:mini": "node build.js --minify",
     "test": "echo 'Tests coming soon'",
     "dev": "echo 'Open example/index.html or examples/test-all-providers.html in a browser'",
-    "lint": "echo 'Linting coming soon'",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "echo 'Formatting coming soon'",
     "prepublishOnly": "npm run build:mini"
   },
@@ -61,7 +62,9 @@
     "LICENSE.md"
   ],
   "devDependencies": {
-    "esbuild": "^0.25.11"
+    "esbuild": "^0.25.11",
+    "eslint": "^9.11.1",
+    "eslint-plugin-security": "^2.1.1"
   },
   "peerDependencies": {},
   "dependencies": {}

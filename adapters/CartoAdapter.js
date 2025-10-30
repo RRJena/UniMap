@@ -78,11 +78,130 @@ export class CartoAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+    
+    let marker;
+    if (options.html) {
+      const icon = L.divIcon({
+        html: options.html,
+        className: options.className || 'custom-marker',
+        iconSize: options.iconSize ? [options.iconSize.width || 32, options.iconSize.height || 32] : [32, 32]
+      });
+      marker = L.marker([options.lat, options.lng], { icon });
+    } else if (options.iconUrl) {
+      const icon = L.icon({
+        iconUrl: options.iconUrl,
+        iconSize: options.iconSize ? [options.iconSize.width || 32, options.iconSize.height || 32] : [32, 32],
+        iconAnchor: options.iconAnchor ? [options.iconAnchor.x || 16, options.iconAnchor.y || 16] : [16, 16]
+      });
+      marker = L.marker([options.lat, options.lng], { icon, title: options.title || '' });
+    } else {
+      marker = L.marker([options.lat, options.lng], {
+        title: options.title || '',
+        draggable: options.draggable || false
+      });
+    }
+
+    if (options.title && !options.html) {
+      marker.bindPopup(options.title);
+    }
+
+    marker.addTo(this.map);
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+  const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    const clickHandler = (e) => {
+      const data = { lat: e.latlng.lat, lng: e.latlng.lng, markerId, event: e };
+      
+      if (callback) {
+        callback(data);
+      }
+
+      if (options.popupHtml) {
+        marker.bindPopup(options.popupHtml).openPopup();
+      }
+
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    marker.on('click', clickHandler);
+    return markerId;
+  }
+
+  _showToast(message, duration = 3000) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
       this.map.removeLayer(marker);
       this.markers.delete(markerId);
+      if (this.markerClickHandlers) {
+        marker.off('click', this.markerClickHandlers.get(markerId));
+        this.markerClickHandlers.delete(markerId);
+      }
       return true;
     }
     return false;
@@ -90,17 +209,40 @@ export class CartoAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
-      if (options.position) {
-        marker.setLatLng([options.position.lat, options.position.lng]);
-      }
-      if (options.title !== undefined) {
-        if (options.title) marker.bindPopup(options.title);
-        else marker.unbindPopup();
-      }
-      return true;
+    if (!marker) {
+      return false;
     }
-    return false;
+
+    if (options.position) {
+      const lat = typeof options.position.latzá === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+      
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        console.error('Invalid position for CARTO marker update:', options.position);
+        return false;
+      }
+      
+      try {
+        marker.setLatLng([lat, lng]);
+      } catch (error) {
+        console.error('Failed to update marker position:', error.message);
+        return false;
+      }
+    }
+    
+    if (options.title !== undefined) {
+      try {
+        if (options.title) {
+          marker.bindPopup(options.title);
+        } else {
+          marker.unbindPopup();
+        }
+      } catch(error) {
+        console.error('Failed to update marker popup:', error.message);
+      }
+    }
+    
+    return true;
   }
 
   setCenter(coords) {
@@ -167,7 +309,8 @@ export class CartoAdapter extends BaseAdapter {
       return Promise.reject(new Error('Invalid coordinates'));
     }
 
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
+    // Encode coordinates to prevent URL injection
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&format=json`;
     
     try {
       const response = await fetch(url);
@@ -205,7 +348,11 @@ export class CartoAdapter extends BaseAdapter {
 
   async getDirections(origin, destination, options = {}) {
     // Use OSRM for routing
-    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+    // Encode coordinates to prevent URL injection
+    const originStr = `${encodeURIComponent(origin.lng)},${encodeURIComponent(origin.lat)}`;
+    const destStr = `${encodeURIComponent(destination.lng)},${encodeURIComponent(destination.lat)}`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${originStr};${destStr}?overview=full&geometries=geojson`;
+
     
     try {
       const response = await fetch(url);

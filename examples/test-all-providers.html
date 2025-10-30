@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniMap - Test All Providers</title>
     <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5568d3;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --dark: #1f2937;
+            --border: #e5e7eb;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --shadow-lg: rgba(0, 0, 0, 0.15);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,34 +26,45 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             padding: 20px;
             min-height: 100vh;
+            line-height: 1.6;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
         }
 
         h1 {
             color: white;
             text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.75em;
+            font-weight: 700;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.95);
             margin-bottom: 30px;
-            font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            font-size: 1.1em;
+            font-weight: 300;
         }
 
         .controls {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 25px;
+            border-radius: 12px;
+             margin-bottom: 20px;
+            box-shadow: 0 8px 24px var(--shadow-lg);
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
         }
 
         .control-group {
@@ -47,52 +72,89 @@
             flex-direction: column;
         }
 
-        label {
+        .control-group label {
             font-weight: 600;
-            margin-bottom: 5px;
-            color: #333;
+            margin-bottom: 8px;
+            color: var(--dark);
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        select, button {
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
+        .control-group label::before {
+            content: '⚙️';
+            font-size: 1.1em;
+        }
+
+        .control-group small {
+            margin-top: 4px;
+            font-size: 0.85em;
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        input[type="text"], select {
+            padding: 12px 15px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
             font-size: 14px;
-        }
-
-        select {
+            transition: all 0.3s ease;
             background: white;
         }
 
-        select:focus, button:focus {
+        input[type="text"]:focus, select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
             cursor: pointer;
             font-weight: 600;
-            transition: transform 0.2s;
+            padding: 12px 20px;
             border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px var(--shadow);
         }
 
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 6px  12px var(--shadow-lg);
         }
 
         button:active {
             transform: translateY(0);
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            font-size: 15px;
+            padding: 14px 25px;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%);
+        }
+
         #map {
-            height: 600px;
+            height: 650px;
             width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.25);
             background: #e0e0e0;
+            margin-bottom: 25px;
+            border: 3px solid white;
         }
 
         .status {
@@ -125,25 +187,87 @@
             color: #721c24;
         }
 
-        .test-buttons {
+        .test-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .test-section h3 {
+            color: var(--dark);
+            margin-bottom: 15px;
+            font-size: 1.35em;
+            font-weight: 600;
             display: flex;
-            flex-wrap: wrap;
+            align-items: center;
             gap: 10px;
-            margin-top: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .test-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
         }
 
         .test-buttons button {
-            flex: 1;
-            min-width: 150px;
+            padding: 10px 15px;
+            font-size: 13px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
         }
 
+        .section-markers h3::before { content: '📍'; }
+        .section-interactions h3::before { content: '👆'; }
+        .section-features h3::before { content: '🗺️'; }
+
         .note {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            padding: 15px;
-            border-radius: 5px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #fbbf24;
+            padding: 18px;
+            border-radius: 10px;
             margin-top: 20px;
-            color: #856404;
+            color: #92400e;
+            box-shadow: 0 4px 8px var(--shadow);
+        }
+
+        .note strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 1.05em;
+        }
+
+        .note::before {
+            content: '💡';
+            margin-right: 8px;
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+            }
+
+            .test-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            #map {
+                height: 400px;
+            }
+
+            .test-section {
+                padding: 15px;
+            }
         }
     </style>
 </head>
@@ -153,8 +277,8 @@
         
         <div class="controls">
             <div class="control-group">
-                <label for="provider">Provider:</label>
-                <select id="provider">
+                <label for="provider">Map Provider</label>
+                <select id="provider" onchange="toggleMapIdField()">
                     <option value="google">Google Maps</option>
                     <option value="mapbox">Mapbox</option>
                     <option value="bing">Bing Maps</option>
@@ -169,28 +293,66 @@
             </div>
 
             <div class="control-group">
-                <label for="apiKey">API Key:</label>
-                <input type="text" id="apiKey" placeholder="Enter API key" />
+                <label for="apiKey">API Key</label>
+                <input type="text" id="apiKey" placeholder="Enter your API key" />
+            </div>
+
+            <div class="control-group" id="mapIdGroup" style="display: none;">
+                <label for="mapId">Map ID (Google Maps)</label>
+                <input type="text" id="mapId" placeholder="Optional: Enter Map ID" />
+                <small>Required for Advanced Markers. Create in Google Cloud Console > Maps > Map Styles</small>
             </div>
 
             <div class="control-group">
                 <label>&nbsp;</label>
-                <button onclick="initMap()">Initialize Map</button>
+                <button class="btn-primary" onclick="initMap()">🚀 Initialize Map</button>
             </div>
         </div>
 
         <div id="map"></div>
 
-        <div class="test-buttons">
-            <button onclick="testAddMarker()">Add Marker</button>
-            <button onclick="testGeocode()">Test Geocoding</button>
-            <button onclick="testReverseGeocode()">Reverse Geocode</button>
-            <button onclick="testDrawRoute()">Draw Route</button>
-            <button onclick="testDirections()">Get Directions</button>
-            <button onclick="testShapes()">Add Shapes</button>
-            <button onclick="testHeatmap()">Add Heatmap</button>
-            <button onclick="testUserLocation()">Get User Location</button>
-            <button onclick="clearMap()">Clear Map</button>
+        <div class="test-section">
+            <h3>Basic Features</h3>
+            <div class="test-buttons">
+                <button onclick="testAddMarker()">📍 Add Marker</button>
+                <button onclick="testGeocode()">🔍 Geocode</button>
+                <button onclick="testReverseGeocode()">🔄 Reverse Geocode</button>
+                <button onclick="testDrawRoute()">🛣️ Draw Route</button>
+                <button onclick="testDirections()">🧭 Get Directions</button>
+                <button onclick="testShapes()">🔷 Add Shapes</button>
+                <button onclick="testHeatmap()">🔥 Add Heatmap</button>
+                <button onclick="testUserLocation()">📍 Get User Location</button>
+            </div>
+        </div>
+
+        <div class="test-section section-markers">
+            <h3>Custom Markers</h3>
+            <div class="test-buttons">
+                <button onclick="testCustomMarker()">🎨 Custom Marker (HTML)</button>
+                <button onclick="testCustomMarkerIcon()">🖼️ Custom Marker (Icon)</button>
+                <button onclick="testCustomMarkerStyled()">✨ Styled Marker</button>
+                <button onclick="testCustomMarkersArray()">📌 Multiple Markers</button>
+            </div>
+        </div>
+
+        <div class="test-section section-interactions">
+            <h3>Marker Interactions</h3>
+            <div class="test-buttons">
+                <button onclick="testMarkerClick()">👆 Click (Popup + Toast)</button>
+                <button onclick="testMarkerClickToast()">🔔 Click (Toast Only)</button>
+                <button onclick="testMarkerClickPopup()">💬 Click (Popup Only)</button>
+                <button onclick="testMarkerClickCallback()">⚡ Click (Callback)</button>
+                <button onclick="testUpdateMarker()">🔄 Update Marker</button>
+            </div>
+        </div>
+
+        <div class="test-section section-features">
+            <h3>Map Features</h3>
+            <div class="test-buttons">
+                <button onclick="testMapEvents()">🎯 Test Events</button>
+                <button onclick="testMapNavigation()">🧭 Navigation</button>
+                <button class="btn-danger" onclick="clearMap()">🗑️ Clear Map</button>
+            </div>
         </div>
 
         <div class="status">
@@ -205,8 +367,17 @@
         </div>
     </div>
 
-    <script type="module">
-        import { UniMap } from '../unimap.js';
+    <script src="../build/unimap.mini.js" onerror="console.error('Failed to load UniMap bundle!'); alert('Error: Failed to load UniMap bundle. Please check the file path.');"></script>
+    <script>
+        // Using global UniMap from the built bundle
+        
+        // Verify UniMap is loaded
+        if (typeof UniMap === 'undefined') {
+            console.error('❌ UniMap is not defined! Check if build/unimap.mini.js loaded correctly.');
+            alert('Error: UniMap bundle failed to load. Please check the console and verify build/unimap.mini.js exists.');
+        } else {
+            console.log('✅ UniMap loaded successfully');
+        }
 
         let map = null;
         let markers = [];
@@ -215,6 +386,7 @@
         window.initMap = async function() {
             const provider = document.getElementById('provider').value;
             const apiKey = document.getElementById('apiKey').value;
+            const mapId = document.getElementById('mapId')?.value;
 
             if (!apiKey) {
                 addStatus('Please enter an API key', 'error');
@@ -224,14 +396,21 @@
             try {
                 addStatus(`Initializing ${provider} map...`, 'success');
                 
+                const options = {
+                    center: { lat: 37.7749, lng: -122.4194 }, // San Francisco
+                    zoom: 13
+                };
+
+                // Add Map ID for Google Maps
+                if (provider === 'google' && mapId) {
+                    options.mapId = mapId;
+                }
+                
                 map = new UniMap({
                     provider: provider,
                     apiKey: apiKey,
                     containerId: 'map',
-                    options: {
-                        center: { lat: 37.7749, lng: -122.4194 }, // San Francisco
-                        zoom: 13
-                    }
+                    options: options
                 });
 
                 await map.init();
@@ -442,6 +621,344 @@
                 map.setCenter({ lat: location.lat, lng: location.lng });
             } catch (error) {
                 addStatus(`❌ Location error: ${error.message}`, 'error');
+            }
+        };
+
+        window.testCustomMarker = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const center = map.getCenter();
+                const markerId = map.addCustomMarker({
+                    lat: center.lat,
+                    lng: center.lng,
+                    html: '<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 12px; border-radius: 8px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">📍 Custom HTML Marker</div>',
+                    className: 'custom-marker'
+                });
+                markers.push(markerId);
+                addStatus(`✅ Custom marker added: ${markerId}`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding custom marker: ${error.message}`, 'error');
+            }
+        };
+
+        window.testCustomMarkerIcon = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const center = map.getCenter();
+                // Using a canvas to create a simple icon
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FF0000';
+                ctx.beginPath();
+                ctx.arc(16, 16, 14, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('📍', 16, 16);
+
+                const iconUrl = canvas.toDataURL();
+                const markerId = map.addCustomMarker({
+                    lat: center.lat + 0.005,
+                    lng: center.lng + 0.005,
+                    iconUrl: iconUrl,
+                    iconSize: { width: 32, height: 32 }
+                });
+                markers.push(markerId);
+                addStatus(`✅ Custom marker (Icon URL) added: ${markerId}`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding custom marker: ${error.message}`, 'error');
+            }
+        };
+
+        window.testCustomMarkerStyled = function() {
+            if (!map) {
+                addStatus('Map not initialized',  'error');
+                return;
+            }
+
+            try {
+                const center = map.getCenter();
+                const markerIds = [];
+                
+                // Badge-style marker
+                const badgeId = map.addCustomMarker({
+                    lat: center.lat + 0.008,
+                    lng: center.lng - 0.008,
+                    html: '<div style="background: #10b981; color: white; padding: 6px 10px; border-radius: 20px; font-weight: bold; font-size: 12px;">✓ Badge</div>'
+                });
+                markerIds.push(badgeId);
+                
+                // Icon + text marker
+                const iconTextId = map.addCustomMarker({
+                    lat: center.lat - 0.008,
+                    lng: center.lng +  0.008,
+                    html: '<div style="background: white; padding: 6px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 6px;"><span style="font-size: 20px;">⭐</span><span style="font-weight: bold; color: #333;">Star</span></div>'
+                });
+                markerIds.push(iconTextId);
+                
+                // Animated marker
+                const animatedId = map.addCustomMarker({
+                    lat: center.lat,
+                    lng: center.lng - 0.01,
+                    html: '<div style="background: #f59e0b; color: white; padding: 8px 12px; border-radius: 8px; animation: pulse 2s infinite;">🎯 Animated</div>'
+                });
+                markerIds.push(animatedId);
+                
+                markers.push(...markerIds);
+                addStatus(`✅ Added 3 styled custom markers (badge, icon+text, animated)`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding styled markers: ${error.message}`, 'error');
+            }
+        };
+
+        window.testCustomMarkersArray = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const center = map.getCenter();
+                const markersArray = [];
+                
+                for (let i = 0; i < 5; i++) {
+                    markersArray.push({
+                        lat: center.lat + (Math.random() - 0.5) * 0.02,
+                        lng: center.lng + (Math.random() - 0.5) * 0.02,
+                        html: `<div style="background: ${['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444'][i]}; color: white; padding: 6px 10px; border-radius: 6px; font-size: 12px;">Marker ${i + 1}</div>`
+                    });
+                }
+                
+                const markerIds = map.addCustomMarkers(markersArray);
+                markers.push(...markerIds);
+                addStatus(`✅ Added ${markerIds.length} custom markers from array`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding custom markers: ${error.message}`, 'error');
+            }
+        };
+
+        window.testMarkerClick = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                if (markers.length === 0) {
+                    const center = map.getCenter();
+                    const markerId = map.addMarker({
+                        lat: center.lat,
+                        lng: center.lng,
+                        title: 'Click me!',
+                        label: '📍'
+                    });
+                    markers.push(markerId);
+                }
+
+                const markerId = markers[markers.length - 1];
+                const centerPos = map.getCenter();
+                
+                map.onMarkerClick(markerId, () => {
+                    addStatus('✅ Marker clicked!', 'success');
+                }, {
+                    popupHtml: `<div style="padding: 10px;"><h3 style="margin: 0 0 8px 0;">Location Details</h3><p>Lat: ${centerPos.lat.toFixed(4)}</p><p>Lng: ${centerPos.lng.toFixed(4)}</p></div>`,
+                    toastMessage: 'You clicked the marker!'
+                });
+                
+                addStatus(`✅ Click handler added to marker ${markerId}. Click to test!`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+            }
+        };
+
+        window.testMarkerClickToast = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                if (markers.length === 0) {
+                    const center = map.getCenter();
+                    const markerId = map.addMarker({
+                        lat: center.lat,
+                        lng: center.lng,
+                        title: 'Click for toast!',
+                        label: '🔔'
+                    });
+                    markers.push(markerId);
+                }
+
+                const markerId = markers[markers.length - 1];
+                
+                map.onMarkerClick(markerId, () => {
+                    addStatus('✅ Toast marker clicked!', 'success');
+                }, {
+                    toastMessage: '🎉 This is a toast notification!',
+                    toastDuration: 3000
+                });
+                
+                addStatus(`✅ Toast-only handler added to marker ${markerId}. Click to test!`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+            }
+        };
+
+        window.testMarkerClickPopup = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                if (markers.length === 0) {
+                    const center = map.getCenter();
+                    const markerId = map.addMarker({
+                        lat: center.lat,
+                        lng: center.lng,
+                        title: 'Click for popup!',
+                        label: '💬'
+                    });
+                    markers.push(markerId);
+                }
+
+                const markerId = markers[markers.length - 1];
+                const centerPos = map.getCenter();
+                
+                map.onMarkerClick(markerId, () => {
+                    addStatus('✅ Popup marker clicked!', 'success');
+                }, {
+                    popupHtml: `<div style="padding: 15px; max-width: 250px;"><h3 style="margin: 0 0 10px 0; color: #667eea;">Information</h3><p style="margin: 0;">Coordinates: ${centerPos.lat.toFixed(4)}, ${centerPos.lng.toFixed(4)}</p><p style="margin: 10px 0 0 0; color: #6b7280; font-size: 0.9em;">This is a custom popup with HTML content.</p></div>`
+                });
+                
+                addStatus(`✅ Popup-only handler added to marker ${markerId}. Click to test!`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+            }
+        };
+
+        window.testMarkerClickCallback = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                if (markers.length === 0) {
+                    const center = map.getCenter();
+                    const markerId = map.addMarker({
+                        lat: center.lat,
+                        lng: center.lng,
+                        title: 'Click for callback!',
+                        label: '⚡'
+                    });
+                    markers.push(markerId);
+                }
+
+                const markerId = markers[markers.length - 1];
+                
+                map.onMarkerClick(markerId, () => {
+                    addStatus('✅ Callback-only marker clicked! This is just a callback without popup or toast.', 'success');
+                });
+                
+                addStatus(`✅ Callback-only handler added to marker ${markerId}. Click to test!`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+            }
+        };
+
+        window.testUpdateMarker = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                if (markers.length === 0) {
+                    const center = map.getCenter();
+                    const markerId = map.addMarker({
+                        lat: center.lat,
+                        lng: center.lng,
+                        title: 'Original Position',
+                        label: '📍'
+                    });
+                    markers.push(markerId);
+                }
+
+                const markerId = markers[markers.length - 1];
+                const center = map.getCenter();
+                
+                map.updateMarker(markerId, {
+                    position: {
+                        lat: center.lat + (Math.random() - 0.5) * 0.01,
+                        lng: center.lng + (Math.random() - 0.5) * 0.01
+                    },
+                    title: 'Updated Position'
+                });
+                
+                addStatus(`✅ Marker ${markerId} updated successfully!`, 'success');
+            } catch (error) {
+                addStatus(`❌ Error updating marker: ${error.message}`, 'error');
+            }
+        };
+
+        window.testMapEvents = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                map.on('click', (event) => {
+                    addStatus(`✅ Map clicked at: ${event.lat.toFixed(4)}, ${event.lng.toFixed(4)}`, 'info');
+                });
+
+                map.on('zoom', (event) => {
+                    addStatus(`✅ Map zoomed to: ${event.zoom}`, 'info');
+                });
+
+                addStatus('✅ Map event listeners added (click, zoom). Interact with the map to test!', 'success');
+            } catch (error) {
+                addStatus(`❌ Error adding map events: ${error.message}`, 'error');
+            }
+        };
+
+        window.testMapNavigation = function() {
+            if (!map) {
+                addStatus('Map not initialized', 'error');
+                return;
+            }
+
+            try {
+                const center = map.getCenter();
+                
+                // Test pan
+                map.panTo({ lat: center.lat + 0.01, lng: center.lng + 0.01 });
+                
+                setTimeout(() => {
+                    map.setZoom(15);
+                }, 500);
+                
+                setTimeout(() => {
+                    map.setZoom(12);
+                    map.setCenter({ lat: center.lat, lng: center.lng });
+                }, 1000);
+                
+                addStatus('✅ Map navigation tested (pan, zoom in, zoom out)', 'success');
+            } catch (error) {
+                addStatus(`❌ Navigation error: ${error.message}`, 'error');
             }
         };
 

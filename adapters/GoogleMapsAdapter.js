@@ -17,10 +17,13 @@ export class GoogleMapsAdapter extends BaseAdapter {
         throw new Error(`Container element with ID '${this.containerId}' not found.`);
       }
 
-      this.map = new google.maps.Map(mapElement, {
+      // Map ID is required for Advanced Marker Element (custom HTML markers)
+      // Generate a default map ID if not provided, or use user-provided one
+      const mapId = this.options.mapId || 'unimap-default';
+      
+      const mapOptions = {
         center: this.options.center || { lat: 0, lng: 0 },
         zoom: this.options.zoom || 10,
-        styles: this.options.styles || [],
         mapTypeId: this.options.mapTypeId || 'roadmap',
         disableDefaultUI: this.options.disableDefaultUI || false,
         zoomControl: this.options.zoomControl !== false,
@@ -29,7 +32,19 @@ export class GoogleMapsAdapter extends BaseAdapter {
         streetViewControl: this.options.streetViewControl !== false,
         rotateControl: this.options.rotateControl !== false,
         fullscreenControl: this.options.fullscreenControl !== false
-      });
+      };
+      
+      // Add mapId for Advanced Marker support (available in newer Google Maps API)
+      // Note: When mapId is present, styles must be controlled via Cloud Console, not here
+      if (mapId) {
+        mapOptions.mapId = mapId;
+        // Don't set styles when mapId is present - Google Maps will warn and ignore it
+      } else if (this.options.styles && Array.isArray(this.options.styles) && this.options.styles.length > 0) {
+        // Only set styles if no mapId is provided (styles controlled via Cloud Console when mapId exists)
+        mapOptions.styles = this.options.styles;
+      }
+
+      this.map = new google.maps.Map(mapElement, mapOptions);
 
       await new Promise((resolve) => {
         google.maps.event.addListenerOnce(this.map, 'idle', resolve);
@@ -48,7 +63,9 @@ export class GoogleMapsAdapter extends BaseAdapter {
       }
       
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${this.apiKey}&libraries=places,visualization,geometry&callback=initGoogleMaps`;
+      // Include 'marker' library so google.maps.marker.AdvancedMarkerElement is available
+      // Use loading=async parameter for best-practice loading (recommended by Google)
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${this.apiKey}&libraries=places,visualization,geometry,marker&loading=async&callback=initGoogleMaps`;
       script.async = true;
       script.defer = true;
       
@@ -116,6 +133,225 @@ export class GoogleMapsAdapter extends BaseAdapter {
     return markerId;
   }
 
+  addCustomMarker(options) {
+    if (!this.map) {
+      throw new Error('Map not initialized');
+    }
+
+    if (!options || typeof options.lat !== 'number' || typeof options.lng !== 'number') {
+      throw new Error('addCustomMarker requires options with numeric lat and lng properties');
+    }
+
+    const markerId = this._generateId();
+
+    // Support custom HTML content (requires 'marker' library and valid Map ID)
+    if (options.html) {
+      const Advanced = google.maps.marker && google.maps.marker.AdvancedMarkerElement;
+      if (Advanced) {
+        try {
+          const htmlMarker = new Advanced({
+            map: this.map,
+            position: { lat: options.lat, lng: options.lng },
+            content: this._createMarkerElement(options.html, options.className)
+          });
+          this.markers.set(markerId, htmlMarker);
+          return markerId;
+        } catch (error) {
+          // Fallback if Advanced Marker fails (e.g., no valid Map ID)
+          console.warn('AdvancedMarkerElement failed, falling back to standard Marker:', error.message);
+          const fallback = new google.maps.Marker({
+            position: { lat: options.lat, lng: options.lng },
+            map: this.map,
+            title: options.title || 'Custom marker'
+          });
+          this.markers.set(markerId, fallback);
+          return markerId;
+        }
+      }
+      // Fallback: use a normal Marker if AdvancedMarkerElement is unavailable
+      console.warn('google.maps.marker.AdvancedMarkerElement unavailable. Falling back to standard Marker.');
+      const fallback = new google.maps.Marker({
+        position: { lat: options.lat, lng: options.lng },
+        map: this.map,
+        title: options.title || 'Custom marker'
+      });
+      this.markers.set(markerId, fallback);
+      return markerId;
+    }
+
+    // Support custom icon
+    const markerOptions = {
+      position: { lat: options.lat, lng: options.lng },
+      map: this.map,
+      title: options.title || '',
+      label: options.label || '',
+      draggable: options.draggable || false,
+      clickable: options.clickable !== false
+    };
+
+    if (options.iconUrl || options.icon) {
+      markerOptions.icon = options.icon || {
+        url: options.iconUrl,
+        scaledSize: options.iconSize ? new google.maps.Size(options.iconSize.width || 32, options.iconSize.height || 32) : null,
+        anchor: options.iconAnchor ? new google.maps.Point(options.iconAnchor.x || 16, options.iconAnchor.y || 16) : null
+      };
+    }
+
+    const marker = new google.maps.Marker(markerOptions);
+    this.markers.set(markerId, marker);
+    return markerId;
+  }
+
+  addCustomMarkers(markersArray) {
+    if (!Array.isArray(markersArray)) {
+      throw new Error('addCustomMarkers requires an array of marker options');
+    }
+
+    return markersArray.map(markerOptions => this.addCustomMarker(markerOptions));
+  }
+
+  onMarkerClick(markerId, callback, options = {}) {
+    const marker = this.markers.get(markerId);
+    if (!marker) {
+      throw new Error(`Marker with id ${markerId} not found`);
+    }
+
+    // Check if this is an AdvancedMarkerElement
+    const isAdvancedMarker = google.maps.marker && google.maps.marker.AdvancedMarkerElement && marker instanceof google.maps.marker.AdvancedMarkerElement;
+
+    const clickHandler = (event) => {
+      // Extract position - AdvancedMarkerElement uses different event structure
+      let lat, lng;
+      if (isAdvancedMarker) {
+        // AdvancedMarkerElement: event has latLng property or use marker.position
+        if (event.latLng) {
+          lat = event.latLng.lat();
+          lng = event.latLng.lng();
+        } else if (marker.position) {
+          lat = typeof marker.position.lat === 'function' ? marker.position.lat() : marker.position.lat;
+          lng = typeof marker.position.lng === 'function' ? marker.position.lng() : marker.position.lng;
+        }
+      } else if (event.latLng) {
+        // Standard Marker
+        lat = event.latLng.lat();
+        lng = event.latLng.lng();
+      } else if (marker.position && typeof marker.getPosition === 'function') {
+        // Fallback: use marker's current position
+        const pos = marker.getPosition();
+        lat = pos.lat();
+        lng = pos.lng();
+      }
+
+      // Call the callback
+      if (callback && (lat !== undefined && lng !== undefined)) {
+        callback({ lat, lng, markerId, event });
+      }
+
+      // Show popup if HTML content provided
+      if (options.popupHtml) {
+        const infoWindow = new google.maps.InfoWindow({
+          content: options.popupHtml
+        });
+        
+        // For AdvancedMarkerElement, we need to provide a position
+        if (isAdvancedMarker && marker.position) {
+          const pos = typeof marker.position.lat === 'function' 
+            ? { lat: marker.position.lat(), lng: marker.position.lng() }
+            : marker.position;
+          infoWindow.setPosition(pos);
+          infoWindow.open(this.map);
+        } else {
+          infoWindow.open(this.map, marker);
+        }
+      }
+
+      // Show toast notification
+      if (options.toast || options.toastMessage) {
+        this._showToast(options.toastMessage || 'Marker clicked', options.toastDuration || 3000);
+      }
+    };
+
+    // Store click handler for cleanup
+    if (!this.markerClickHandlers) {
+      this.markerClickHandlers = new Map();
+    }
+    this.markerClickHandlers.set(markerId, clickHandler);
+
+    // AdvancedMarkerElement uses 'gmp-click' event, standard Marker uses 'click'
+    // However, some versions use 'click' for both, so we'll try both
+    try {
+      if (isAdvancedMarker && marker.addListener) {
+        // Try gmp-click first for AdvancedMarkerElement
+        marker.addListener('gmp-click', clickHandler);
+      } else {
+        marker.addListener('click', clickHandler);
+      }
+          } catch {
+      // Fallback to 'click' if 'gmp-click' doesn't work
+      marker.addListener('click', clickHandler);
+    }
+    
+    return markerId;
+  }
+
+  _createMarkerElement(html, className) {
+    const div = document.createElement('div');
+    // eslint-disable-next-line no-restricted-syntax
+    div.innerHTML = html;
+    if (className) {
+      div.className = className;
+    }
+    div.style.cursor = 'pointer';
+    return div;
+  }
+
+  _showToast(message, duration = 3000) {
+    // Create toast element if it doesn't exist
+    if (!this.toastContainer) {
+      this.toastContainer = document.createElement('div');
+      this.toastContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        pointer-events: none;
+      `;
+      document.body.appendChild(this.toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: auto;
+    `;
+    toast.textContent = message;
+    this.toastContainer.appendChild(toast);
+
+    // Fade in
+    setTimeout(() => {
+      toast.style.opacity = '1';
+    }, 10);
+
+    // Remove after duration
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, duration);
+
+    return toast;
+  }
+
   removeMarker(markerId) {
     const marker = this.markers.get(markerId);
     if (marker) {
@@ -128,17 +364,79 @@ export class GoogleMapsAdapter extends BaseAdapter {
 
   updateMarker(markerId, options) {
     const marker = this.markers.get(markerId);
-    if (marker) {
+    if (!marker) {
+      return false;
+    }
+
+    // Check if this is an AdvancedMarkerElement (custom HTML marker)
+    const isAdvancedMarker = google.maps.marker && google.maps.marker.AdvancedMarkerElement && marker instanceof google.maps.marker.AdvancedMarkerElement;
+    
+    if (isAdvancedMarker) {
+      // Handle AdvancedMarkerElement (used for custom HTML markers)
+      // AdvancedMarkerElement uses 'position' property with LatLng or LatLngLiteral
       if (options.position) {
-        marker.setPosition({ lat: options.position.lat, lng: options.position.lng });
+        const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+        const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+        
+        if (typeof lat === 'number' && typeof lng === 'number' && isFinite(lat) && isFinite(lng)) {
+          // AdvancedMarkerElement accepts LatLngLiteral object {lat, lng} or LatLng instance
+          try {
+            marker.position = new google.maps.LatLng(lat, lng);
+          } catch {
+            // Fallback to LatLngLiteral if LatLng constructor fails
+            marker.position = { lat: lat, lng: lng };
+          }
+        } else {
+          console.error('Invalid position for AdvancedMarkerElement:', options.position);
+          return false;
+        }
       }
-      if (options.title !== undefined) marker.setTitle(options.title);
-      if (options.label !== undefined) marker.setLabel(options.label);
-      if (options.icon !== undefined) marker.setIcon(options.icon);
-      if (options.draggable !== undefined) marker.setDraggable(options.draggable);
+      // AdvancedMarkerElement doesn't support title/label/icon updates directly
+      // Those are part of the HTML content, which would require recreating the marker
+      if (options.title !== undefined || options.label !== undefined || options.icon !== undefined) {
+        console.warn('AdvancedMarkerElement: title, label, and icon updates require recreating the marker with new HTML content.');
+      }
+      return true;
+    } else {
+      // Handle standard google.maps.Marker
+      if (options.position) {
+        const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
+        const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
+        
+        if (typeof lat === 'number' && typeof lng === 'number' && isFinite(lat) && isFinite(lng)) {
+          if (typeof marker.setPosition === 'function') {
+            marker.setPosition({ lat: lat, lng: lng });
+          } else if (marker.position !== undefined) {
+            // Fallback: marker might be AdvancedMarkerElement or another type that uses position property
+            // Try to set position directly
+            try {
+              marker.position = new google.maps.LatLng(lat, lng);
+            } catch {
+              marker.position = { lat: lat, lng: lng };
+            }
+          } else {
+            console.warn('Marker does not support setPosition method and has no position property');
+            return false;
+          }
+        } else {
+          console.error('Invalid position for marker update:', options.position);
+          return false;
+        }
+      }
+      if (options.title !== undefined && typeof marker.setTitle === 'function') {
+        marker.setTitle(options.title);
+      }
+      if (options.label !== undefined && typeof marker.setLabel === 'function') {
+        marker.setLabel(options.label);
+      }
+      if (options.icon !== undefined && typeof marker.setIcon === 'function') {
+        marker.setIcon(options.icon);
+      }
+      if (options.draggable !== undefined && typeof marker.setDraggable === 'function') {
+        marker.setDraggable(options.draggable);
+      }
       return true;
     }
-    return false;
   }
 
   setCenter(coords) {
@@ -235,7 +533,7 @@ export class GoogleMapsAdapter extends BaseAdapter {
       throw new Error('Map not initialized');
     }
     if (!this._validateCoordinates(lat, lng)) {
-      return Promise.reject('Invalid coordinates');
+      return Promise.reject(new Error('Invalid coordinates'));
     }
 
     const geocoder = new google.maps.Geocoder();
@@ -573,7 +871,9 @@ export class GoogleMapsAdapter extends BaseAdapter {
 
     const container = this.getContainer();
     if (container) {
-      container.innerHTML = '';
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
     }
 
     this.map = null;

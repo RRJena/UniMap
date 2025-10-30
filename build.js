@@ -16,7 +16,13 @@ const buildOptions = {
   define: {
     'process.env.NODE_ENV': '"production"'
   },
-  treeShaking: true
+  treeShaking: true,
+  banner: {
+    js: '// UniMap Bundle'
+  },
+  footer: {
+    js: minify ? ';window.UniMap=UniMap.UniMap||UniMap;' : ';window.UniMap = UniMap.UniMap || UniMap;'
+  }
 };
 
 try {
