@@ -178,7 +178,23 @@ export class BaseAdapter {
     );
   }
 
+  /**
+   * Generate a cryptographically secure random string
+   * @param {number} length - Length of random string
+   * @returns {string} - Random string
+   */
+  _getSecureRandomString(length = 9) {
+    // Browser: Use crypto.getRandomValues for secure randomness
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+      const array = new Uint32Array(Math.ceil(length / 2));
+      window.crypto.getRandomValues(array);
+      return Array.from(array, dec => dec.toString(36)).join('').substring(0, length);
+    }
+    // Fallback for environments without crypto support
+    return Math.random().toString(36).substring(2, 2 + length);
+  }
+
   _generateId() {
-    return `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `id_${Date.now()}_${this._getSecureRandomString(9)}`;
   }
 }

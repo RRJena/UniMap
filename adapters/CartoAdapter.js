@@ -214,7 +214,7 @@ export class CartoAdapter extends BaseAdapter {
     }
 
     if (options.position) {
-      const lat = typeof options.position.latzá === 'number' ? options.position.lat : parseFloat(options.position.lat);
+      const lat = typeof options.position.lat === 'number' ? options.position.lat : parseFloat(options.position.lat);
       const lng = typeof options.position.lng === 'number' ? options.position.lng : parseFloat(options.position.lng);
       
       if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
