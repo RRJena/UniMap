@@ -4,7 +4,7 @@ info:
   description: Universal mapping library API for creating interactive maps with multiple providers. Supports Google Maps, Mapbox, Bing Maps, OpenStreetMap, Azure Maps, HERE Maps, TomTom, Yandex Maps, CARTO, and MapmyIndia.
   version: 2.3.0
 servers:
-  - url: https://your-domain.com/api
+  - url: https://uni-map-tau.vercel.app/api
     description: UniMap API Server
 
 paths:

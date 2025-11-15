@@ -9,11 +9,11 @@
   },
   "api": {
     "type": "openapi",
-    "url": "https://your-domain.com/.well-known/openapi.yaml",
+    "url": "https://uni-map-tau.vercel.app/.well-known/openapi.yaml",
     "is_user_authenticated": false
   },
-  "logo_url": "https://your-domain.com/logo.png",
-  "contact_email": "your-email@example.com",
-  "legal_info_url": "https://your-domain.com/legal"
+  "logo_url": "https://uni-map-tau.vercel.app/logo.png",
+  "contact_email": "rakesh@example.com",
+  "legal_info_url": "https://uni-map-tau.vercel.app/legal"
 }
 
