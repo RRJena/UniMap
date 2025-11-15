@@ -53,6 +53,8 @@
   ],
   "files": [
     "unimap.js",
+    "unimap-element.js",
+    "unimap-complete.js",
     "build/",
     "adapters/",
     "utils/",
