@@ -18,6 +18,7 @@
  */
 
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -26,6 +27,14 @@ const __dirname = dirname(__filename);
 
 const app = express();
 app.use(express.json());
+
+// Rate limiter for static files
+const staticFileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // CORS headers for OpenAI
 app.use((req, res, next) => {
@@ -39,12 +48,12 @@ app.use((req, res, next) => {
 });
 
 // Serve plugin manifest
-app.get('/.well-known/ai-plugin.json', (req, res) => {
+app.get('/.well-known/ai-plugin.json', staticFileLimiter, (req, res) => {
   res.sendFile(join(__dirname, '..', '.well-known', 'ai-plugin.json'));
 });
 
 // Serve OpenAPI spec
-app.get('/.well-known/openapi.yaml', (req, res) => {
+app.get('/.well-known/openapi.yaml', staticFileLimiter, (req, res) => {
   res.setHeader('Content-Type', 'text/yaml');
   res.sendFile(join(__dirname, '..', '.well-known', 'openapi.yaml'));
 });
@@ -57,12 +66,27 @@ function generateId(prefix = 'map') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+/**
+ * Check if a string is valid coordinates format "lat,lng"
+ * Uses safe regex pattern to avoid ReDoS vulnerability
+ * @param {string} str - String to check
+ * @returns {boolean} - True if valid coordinates
+ */
+function isValidCoordinates(str) {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  // Safe regex: match two numbers with optional decimals, separated by comma
+  // Pattern: -?[0-9]+(?:\.[0-9]+)?,-?[0-9]+(?:\.[0-9]+)?
+  const coordPattern = /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/;
+  return coordPattern.test(trimmed);
+}
+
 // Helper: Generate UniMap embed code
 function generateUniMapEmbedCode(config) {
   const { location, provider = 'google', zoom = 12, width = '100%', height = '500px', apiKey, markers = [], routes = [] } = config;
   
   // Parse location (could be "lat,lng" or address)
-  const center = location.includes(',') && /^-?\d+\.?\d*,-?\d+\.?\d*$/.test(location.trim())
+  const center = isValidCoordinates(location)
     ? location.trim()
     : location;
 
@@ -76,10 +100,17 @@ function generateUniMapEmbedCode(config) {
 
   // Add markers
   markers.forEach(marker => {
-    const markerLoc = marker.location.includes(',') && /^-?\d+\.?\d*,-?\d+\.?\d*$/.test(marker.location.trim())
-      ? marker.location.trim()
-      : marker.location;
-    embedCode += `  <unimap-marker lat="${markerLoc.split(',')[0]}" lng="${markerLoc.split(',')[1]}" title="${marker.title || ''}" ${marker.label ? `label="${marker.label}"` : ''}></unimap-marker>\n`;
+    // For markers, we need coordinates, not addresses
+    // If location is an address, use the location as-is (custom element will geocode it)
+    if (isValidCoordinates(marker.location)) {
+      const [lat, lng] = marker.location.trim().split(',');
+      embedCode += `  <unimap-marker lat="${lat.trim()}" lng="${lng.trim()}" title="${marker.title || ''}" ${marker.label ? `label="${marker.label}"` : ''}></unimap-marker>\n`;
+    } else {
+      // For addresses, we'd need to geocode first or use a different approach
+      // For now, skip markers with addresses (they should be geocoded first via API)
+      // Alternatively, could add address attribute support if custom element supports it
+      console.warn(`Marker location "${marker.location}" is not in coordinate format. Coordinates required for lat/lng attributes.`);
+    }
   });
 
   // Add routes
