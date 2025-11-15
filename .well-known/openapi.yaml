@@ -1,0 +1,368 @@
+openapi: 3.0.1
+info:
+  title: UniMap API
+  description: Universal mapping library API for creating interactive maps with multiple providers. Supports Google Maps, Mapbox, Bing Maps, OpenStreetMap, Azure Maps, HERE Maps, TomTom, Yandex Maps, CARTO, and MapmyIndia.
+  version: 2.3.0
+servers:
+  - url: https://your-domain.com/api
+    description: UniMap API Server
+
+paths:
+  /map/create:
+    post:
+      operationId: createMap
+      summary: Create a new interactive map
+      description: Creates an interactive map with specified location, provider, and options. Returns embeddable HTML code or map configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - location
+              properties:
+                location:
+                  type: string
+                  description: Location name, address, or coordinates in format "lat,lng"
+                  example: "New York, NY"
+                provider:
+                  type: string
+                  enum: [google, mapbox, bing, osm, azure, here, tomtom, yandex, carto, mapmyindia]
+                  default: google
+                  description: Map provider to use
+                zoom:
+                  type: integer
+                  minimum: 1
+                  maximum: 20
+                  default: 12
+                  description: Initial zoom level
+                width:
+                  type: string
+                  default: "100%"
+                  description: Map width (CSS value)
+                height:
+                  type: string
+                  default: "500px"
+                  description: Map height (CSS value)
+                apiKey:
+                  type: string
+                  description: API key for the selected provider (optional if using OSM)
+      responses:
+        '200':
+          description: Map created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mapId:
+                    type: string
+                  embedCode:
+                    type: string
+                    description: HTML code to embed the map
+                  config:
+                    type: object
+                    description: Map configuration object
+                  instructions:
+                    type: string
+                    description: Instructions for using the map
+
+  /map/add-marker:
+    post:
+      operationId: addMarker
+      summary: Add a marker to an existing map
+      description: Adds a marker at specified coordinates or address to an existing map.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mapId
+                - location
+              properties:
+                mapId:
+                  type: string
+                  description: ID of the map to add marker to
+                location:
+                  type: string
+                  description: Location name, address, or coordinates "lat,lng"
+                title:
+                  type: string
+                  description: Marker title/tooltip
+                label:
+                  type: string
+                  description: Marker label (emoji or text)
+                iconUrl:
+                  type: string
+                  description: Custom icon URL
+      responses:
+        '200':
+          description: Marker added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  markerId:
+                    type: string
+                  updatedEmbedCode:
+                    type: string
+
+  /map/add-route:
+    post:
+      operationId: addRoute
+      summary: Draw a route between locations
+      description: Draws a route/polyline between multiple points on the map.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mapId
+                - locations
+              properties:
+                mapId:
+                  type: string
+                locations:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of location names, addresses, or "lat,lng" coordinates
+                  minItems: 2
+                strokeColor:
+                  type: string
+                  default: "#007bff"
+                  description: Route line color (hex)
+                strokeWeight:
+                  type: integer
+                  default: 3
+                  description: Route line width
+      responses:
+        '200':
+          description: Route added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  routeId:
+                    type: string
+                  updatedEmbedCode:
+                    type: string
+
+  /map/geocode:
+    post:
+      operationId: geocode
+      summary: Convert address to coordinates
+      description: Geocodes an address or place name to latitude and longitude coordinates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - address
+              properties:
+                address:
+                  type: string
+                  description: Address or place name to geocode
+                  example: "Golden Gate Bridge, San Francisco"
+                provider:
+                  type: string
+                  enum: [google, mapbox, bing, osm, azure, here, tomtom, yandex, carto, mapmyindia]
+                  default: google
+      responses:
+        '200':
+          description: Geocoding successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  lat:
+                    type: number
+                  lng:
+                    type: number
+                  formattedAddress:
+                    type: string
+
+  /map/reverse-geocode:
+    post:
+      operationId: reverseGeocode
+      summary: Convert coordinates to address
+      description: Reverse geocodes latitude and longitude coordinates to an address.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lat
+                - lng
+              properties:
+                lat:
+                  type: number
+                  description: Latitude
+                lng:
+                  type: number
+                  description: Longitude
+                provider:
+                  type: string
+                  enum: [google, mapbox, bing, osm, azure, here, tomtom, yandex, carto, mapmyindia]
+                  default: google
+      responses:
+        '200':
+          description: Reverse geocoding successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  formattedAddress:
+                    type: string
+                  lat:
+                    type: number
+                  lng:
+                    type: number
+
+  /map/directions:
+    post:
+      operationId: getDirections
+      summary: Get directions between two locations
+      description: Gets turn-by-turn directions, distance, and duration between origin and destination.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - origin
+                - destination
+              properties:
+                origin:
+                  type: string
+                  description: Origin address or "lat,lng" coordinates
+                destination:
+                  type: string
+                  description: Destination address or "lat,lng" coordinates
+                provider:
+                  type: string
+                  enum: [google, mapbox, bing, osm, azure, here, tomtom, yandex, carto, mapmyindia]
+                  default: google
+                travelMode:
+                  type: string
+                  enum: [driving, walking, bicycling, transit]
+                  default: driving
+      responses:
+        '200':
+          description: Directions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  distance:
+                    type: number
+                    description: Distance in meters
+                  duration:
+                    type: number
+                    description: Duration in seconds
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                  embedCode:
+                    type: string
+                    description: HTML code with route drawn on map
+
+  /map/create-with-features:
+    post:
+      operationId: createMapWithFeatures
+      summary: Create a map with multiple features at once
+      description: Creates a map with markers, routes, and other features in a single request. Perfect for complex mapping scenarios.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - location
+              properties:
+                location:
+                  type: string
+                  description: Center location
+                provider:
+                  type: string
+                  default: google
+                zoom:
+                  type: integer
+                  default: 12
+                markers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      location:
+                        type: string
+                      title:
+                        type: string
+                      label:
+                        type: string
+                routes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      locations:
+                        type: array
+                        items:
+                          type: string
+                      strokeColor:
+                        type: string
+                shapes:
+                  type: object
+                  properties:
+                    polygons:
+                      type: array
+                    circles:
+                      type: array
+                    rectangles:
+                      type: array
+      responses:
+        '200':
+          description: Map with features created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mapId:
+                    type: string
+                  embedCode:
+                    type: string
+                  instructions:
+                    type: string
+

@@ -13,7 +13,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "echo 'Formatting coming soon'",
-    "prepublishOnly": "npm run build:mini"
+    "prepublishOnly": "npm run build:mini",
+    "plugin:server": "node examples/openai-plugin-server.js",
+    "plugin:dev": "node examples/openai-plugin-server.js"
   },
   "keywords": [
     "maps",
@@ -68,6 +70,7 @@
     "eslint": "^9.11.1",
     "eslint-plugin-security": "^2.1.1"
   },
-  "peerDependencies": {},
-  "dependencies": {}
+  "dependencies": {
+    "express": "^5.1.0"
+  }
 }
