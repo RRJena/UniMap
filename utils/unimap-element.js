@@ -117,6 +117,22 @@ export class UniMapElement extends HTMLElement {
   }
 
   /**
+   * Generate a cryptographically secure random string
+   * @param {number} length - Length of random string
+   * @returns {string} - Random string
+   */
+  _getSecureRandomString(length = 11) {
+    // Browser: Use crypto.getRandomValues for secure randomness
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+      const array = new Uint32Array(Math.ceil(length / 2));
+      window.crypto.getRandomValues(array);
+      return Array.from(array, dec => dec.toString(36)).join('').substring(0, length);
+    }
+    // Fallback for environments without crypto support
+    return Math.random().toString(36).substring(2, 2 + length);
+  }
+
+  /**
    * Called when element is inserted into DOM
    */
   connectedCallback() {
@@ -133,7 +149,7 @@ export class UniMapElement extends HTMLElement {
 
     // Generate unique ID if not provided
     if (!this.id) {
-      this.id = `unimap-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+      this.id = `unimap-${Date.now()}-${this._getSecureRandomString(11)}`;
     }
 
     // Check if we have required attributes before initializing
