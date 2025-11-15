@@ -40,21 +40,55 @@ app.use((req, res, next) => {
 // In-memory store for maps (use database in production)
 const maps = new Map();
 
-// Cleanup old map entries to prevent memory leaks
-const MAP_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
-const MAP_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
+// Cleanup configuration
+const MAP_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours - max age since creation
+const MAP_MAX_IDLE = 60 * 60 * 1000; // 1 hour - max idle time since last access
+const CLEANUP_ON_REQUEST_PROBABILITY = 0.1; // 10% chance to run cleanup on each request
 
+/**
+ * Cleanup old map entries to prevent memory leaks
+ * Removes entries that are either:
+ * 1. Older than MAP_MAX_AGE since creation, OR
+ * 2. Haven't been accessed for MAP_MAX_IDLE time
+ */
 function cleanupOldMaps() {
   const now = Date.now();
+  let cleanedCount = 0;
+  
   for (const [mapId, mapData] of maps.entries()) {
-    if (mapData.createdAt && (now - mapData.createdAt) > MAP_MAX_AGE) {
+    const age = mapData.createdAt ? (now - mapData.createdAt) : Infinity;
+    const idleTime = mapData.lastAccessed ? (now - mapData.lastAccessed) : Infinity;
+    
+    // Remove if too old OR hasn't been accessed recently
+    if (age > MAP_MAX_AGE || idleTime > MAP_MAX_IDLE) {
       maps.delete(mapId);
+      cleanedCount++;
     }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`[Cleanup] Removed ${cleanedCount} old map entries. ${maps.size} remaining.`);
+  }
+  
+  return cleanedCount;
+}
+
+/**
+ * Opportunistic cleanup: runs with a probability on each request
+ * This ensures cleanup happens in serverless environments where setInterval may not work
+ */
+function opportunisticCleanup() {
+  // Run cleanup with a probability to avoid performance impact on every request
+  if (Math.random() < CLEANUP_ON_REQUEST_PROBABILITY) {
+    cleanupOldMaps();
   }
 }
 
-// Run cleanup periodically
-setInterval(cleanupOldMaps, MAP_CLEANUP_INTERVAL);
+// Run cleanup periodically as a backup (though this may not work in serverless)
+// In serverless, opportunistic cleanup handles most cases
+if (typeof setInterval !== 'undefined') {
+  setInterval(cleanupOldMaps, 60 * 60 * 1000); // 1 hour
+}
 
 // Helper: Generate unique ID
 function generateId(prefix = 'map') {
@@ -79,22 +113,44 @@ function escapeHtml(str) {
 /**
  * Validate and sanitize HTML attribute value
  * @param {string} value - Value to sanitize
- * @param {string} type - Type of attribute ('text', 'url', 'number')
- * @returns {string} - Sanitized value
+ * @param {string} type - Type of attribute ('text', 'url', 'number', 'coordinate')
+ * @returns {string} - Sanitized value safe for HTML attributes
  */
 function sanitizeAttribute(value, type = 'text') {
-  if (!value || typeof value !== 'string') return '';
+  if (value === null || value === undefined) return '';
+  
+  // Convert to string for processing
+  const str = String(value).trim();
+  if (!str) return '';
+  
+  if (type === 'number') {
+    // For numbers, validate it's actually a number and escape
+    const num = parseFloat(str);
+    if (isNaN(num) || !isFinite(num)) return '';
+    // Escape the string representation to prevent injection
+    return escapeHtml(String(num));
+  }
+  
+  if (type === 'coordinate') {
+    // For coordinates, validate format first
+    if (!isValidCoordinates(str)) return '';
+    // Even validated coordinates must be escaped for HTML attributes
+    return escapeHtml(str);
+  }
   
   if (type === 'url') {
     // Basic URL validation - remove script:, javascript:, data:, etc.
     const unsafe = /^(javascript|data|vbscript|file|about):/i;
-    if (unsafe.test(value.trim())) {
+    if (unsafe.test(str)) {
       return '';
     }
+    // Escape URL for HTML attribute context
+    return escapeHtml(str);
   }
   
-  // Remove potentially dangerous characters
-  return escapeHtml(value).replace(/[<>'"]/g, '');
+  // Default: escape all HTML special characters for attribute context
+  // This prevents XSS by escaping quotes, angle brackets, etc.
+  return escapeHtml(str);
 }
 
 /**
@@ -116,15 +172,17 @@ function isValidCoordinates(str) {
 function generateUniMapEmbedCode(config) {
   const { location, provider = 'google', zoom = 12, width = '100%', height = '500px', apiKey, markers = [], routes = [] } = config;
   
-  // Sanitize all inputs
+  // Sanitize all inputs - ALWAYS escape user input, even if validated
   const safeProvider = sanitizeAttribute(provider, 'text');
   const safeLocation = isValidCoordinates(location) 
-    ? location.trim() // Coordinates are numeric, safe to use
+    ? sanitizeAttribute(location, 'coordinate') // Even validated coordinates must be escaped
     : sanitizeAttribute(location, 'text'); // Addresses need sanitization
   const safeApiKey = apiKey ? sanitizeAttribute(apiKey, 'text') : '';
   const safeWidth = sanitizeAttribute(String(width), 'text');
   const safeHeight = sanitizeAttribute(String(height), 'text');
-  const safeZoom = Number.isInteger(zoom) && zoom >= 1 && zoom <= 20 ? zoom : 12;
+  // Zoom is numeric, but we still need to ensure it's safe and escaped
+  const zoomValue = Number.isInteger(zoom) && zoom >= 1 && zoom <= 20 ? zoom : 12;
+  const safeZoom = sanitizeAttribute(String(zoomValue), 'number');
 
   let embedCode = `<unimap-map 
   provider="${safeProvider}" 
@@ -139,8 +197,15 @@ function generateUniMapEmbedCode(config) {
     // For markers, we need coordinates, not addresses
     if (isValidCoordinates(marker.location)) {
       const [lat, lng] = marker.location.trim().split(',');
-      const safeLat = sanitizeAttribute(lat.trim(), 'number');
-      const safeLng = sanitizeAttribute(lng.trim(), 'number');
+      // Validate and escape each coordinate component
+      const latNum = parseFloat(lat.trim());
+      const lngNum = parseFloat(lng.trim());
+      if (isNaN(latNum) || isNaN(lngNum) || !isFinite(latNum) || !isFinite(lngNum)) {
+        // Invalid coordinates, skip this marker
+        return;
+      }
+      const safeLat = sanitizeAttribute(String(latNum), 'number');
+      const safeLng = sanitizeAttribute(String(lngNum), 'number');
       const safeTitle = sanitizeAttribute(marker.title || '', 'text');
       const safeLabel = marker.label ? sanitizeAttribute(marker.label, 'text') : '';
       
@@ -148,20 +213,31 @@ function generateUniMapEmbedCode(config) {
     } else {
       // For addresses, we'd need to geocode first or use a different approach
       // For now, skip markers with addresses (they should be geocoded first via API)
-      console.warn(`Marker location "${marker.location}" is not in coordinate format. Coordinates required for lat/lng attributes.`);
+      // Escape the location in the warning message to prevent XSS in logs
+      const safeLocation = escapeHtml(String(marker.location || ''));
+      console.warn(`Marker location "${safeLocation}" is not in coordinate format. Coordinates required for lat/lng attributes.`);
     }
   });
 
   // Add routes
   routes.forEach(route => {
+    if (!route.locations || !Array.isArray(route.locations)) {
+      return;
+    }
+    
+    // Filter valid coordinates and escape each one
     const safeLocations = route.locations
       .filter(loc => isValidCoordinates(loc))
-      .map(loc => sanitizeAttribute(loc.trim(), 'text'))
+      .map(loc => sanitizeAttribute(loc.trim(), 'coordinate'))
       .join(';');
     
     if (safeLocations) {
       const safeStrokeColor = sanitizeAttribute(route.strokeColor || '#007bff', 'text');
-      const safeStrokeWeight = Number.isInteger(route.strokeWeight) && route.strokeWeight > 0 ? route.strokeWeight : 3;
+      // Validate and escape stroke weight
+      const strokeWeight = Number.isInteger(route.strokeWeight) && route.strokeWeight > 0 
+        ? route.strokeWeight 
+        : 3;
+      const safeStrokeWeight = sanitizeAttribute(String(strokeWeight), 'number');
       
       embedCode += `  <unimap-route coords="${safeLocations}" stroke-color="${safeStrokeColor}" stroke-weight="${safeStrokeWeight}"></unimap-route>\n`;
     }
@@ -176,6 +252,8 @@ function generateUniMapEmbedCode(config) {
 // API: Create Map
 app.post('/api/map/create', async (req, res) => {
   try {
+    opportunisticCleanup(); // Cleanup old entries on request
+    
     const { location, provider = 'google', zoom = 12, width = '100%', height = '500px', apiKey } = req.body;
 
     if (!location) {
@@ -194,13 +272,15 @@ app.post('/api/map/create', async (req, res) => {
       routes: []
     });
 
+    const now = Date.now();
     maps.set(mapId, { 
       location, 
       provider, 
       zoom, 
       markers: [], 
       routes: [],
-      createdAt: Date.now()
+      createdAt: now,
+      lastAccessed: now
     });
 
     res.json({
@@ -218,6 +298,8 @@ app.post('/api/map/create', async (req, res) => {
 // API: Add Marker
 app.post('/api/map/add-marker', async (req, res) => {
   try {
+    opportunisticCleanup(); // Cleanup old entries on request
+    
     const { mapId, location, title, label, iconUrl } = req.body;
 
     if (!mapId || !location) {
@@ -228,6 +310,9 @@ app.post('/api/map/add-marker', async (req, res) => {
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
+
+    // Update last accessed time
+    map.lastAccessed = Date.now();
 
     const markerId = generateId('marker');
     map.markers.push({ id: markerId, location, title, label, iconUrl });
@@ -254,6 +339,8 @@ app.post('/api/map/add-marker', async (req, res) => {
 // API: Add Route
 app.post('/api/map/add-route', async (req, res) => {
   try {
+    opportunisticCleanup(); // Cleanup old entries on request
+    
     const { mapId, locations, strokeColor = '#007bff', strokeWeight = 3 } = req.body;
 
     if (!mapId || !locations || !Array.isArray(locations) || locations.length < 2) {
@@ -264,6 +351,9 @@ app.post('/api/map/add-route', async (req, res) => {
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
+
+    // Update last accessed time
+    map.lastAccessed = Date.now();
 
     const routeId = generateId('route');
     map.routes.push({ id: routeId, locations, strokeColor, strokeWeight });
@@ -351,6 +441,8 @@ app.post('/api/map/directions', async (req, res) => {
 // API: Create Map with Features
 app.post('/api/map/create-with-features', async (req, res) => {
   try {
+    opportunisticCleanup(); // Cleanup old entries on request
+    
     const { location, provider = 'google', zoom = 12, markers = [], routes = [], shapes = {} } = req.body;
 
     if (!location) {
@@ -367,6 +459,7 @@ app.post('/api/map/create-with-features', async (req, res) => {
       shapes
     });
 
+    const now = Date.now();
     maps.set(mapId, { 
       location, 
       provider, 
@@ -374,7 +467,8 @@ app.post('/api/map/create-with-features', async (req, res) => {
       markers, 
       routes, 
       shapes,
-      createdAt: Date.now()
+      createdAt: now,
+      lastAccessed: now
     });
 
     res.json({
@@ -390,8 +484,19 @@ app.post('/api/map/create-with-features', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'UniMap OpenAI Plugin' });
+  opportunisticCleanup(); // Cleanup old entries on health check
+  res.json({ 
+    status: 'ok', 
+    service: 'UniMap OpenAI Plugin',
+    mapsInMemory: maps.size
+  });
 });
 
-// Export for Vercel serverless - wrap Express app properly
-export default app;
+// Export handler for Vercel serverless functions
+// Vercel expects a function with (req, res) signature, not an Express app instance
+// Express apps are callable, so we wrap it in a handler function
+export default function handler(req, res) {
+  // Express apps handle (req, res, next) signature
+  // We call the app as a handler, which will route the request through Express middleware
+  return app(req, res);
+}

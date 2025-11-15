@@ -114,38 +114,62 @@ function escapeHtml(str) {
 
 /**
  * Validate and sanitize HTML attribute value
- * @param {string} value - Value to sanitize
- * @param {string} type - Type of attribute ('text', 'url', 'number')
- * @returns {string} - Sanitized value
+ * @param {string|number} value - Value to sanitize
+ * @param {string} type - Type of attribute ('text', 'url', 'number', 'coordinate')
+ * @returns {string} - Sanitized value safe for HTML attributes
  */
 function sanitizeAttribute(value, type = 'text') {
-  if (!value || typeof value !== 'string') return '';
+  if (value === null || value === undefined) return '';
+  
+  // Convert to string for processing
+  const str = String(value).trim();
+  if (!str) return '';
+  
+  if (type === 'number') {
+    // For numbers, validate it's actually a number and escape
+    const num = parseFloat(str);
+    if (isNaN(num) || !isFinite(num)) return '';
+    // Escape the string representation to prevent injection
+    return escapeHtml(String(num));
+  }
+  
+  if (type === 'coordinate') {
+    // For coordinates, validate format first
+    if (!isValidCoordinates(str)) return '';
+    // Even validated coordinates must be escaped for HTML attributes
+    return escapeHtml(str);
+  }
   
   if (type === 'url') {
     // Basic URL validation - remove script:, javascript:, data:, etc.
     const unsafe = /^(javascript|data|vbscript|file|about):/i;
-    if (unsafe.test(value.trim())) {
+    if (unsafe.test(str)) {
       return '';
     }
+    // Escape URL for HTML attribute context
+    return escapeHtml(str);
   }
   
-  // Remove potentially dangerous characters
-  return escapeHtml(value).replace(/[<>'"]/g, '');
+  // Default: escape all HTML special characters for attribute context
+  // This prevents XSS by escaping quotes, angle brackets, etc.
+  return escapeHtml(str);
 }
 
 // Helper: Generate UniMap embed code
 function generateUniMapEmbedCode(config) {
   const { location, provider = 'google', zoom = 12, width = '100%', height = '500px', apiKey, markers = [], routes = [] } = config;
   
-  // Sanitize all inputs
+  // Sanitize all inputs - ALWAYS escape user input, even if validated
   const safeProvider = sanitizeAttribute(provider, 'text');
   const safeLocation = isValidCoordinates(location) 
-    ? location.trim() // Coordinates are numeric, safe to use
+    ? sanitizeAttribute(location, 'coordinate') // Even validated coordinates must be escaped
     : sanitizeAttribute(location, 'text'); // Addresses need sanitization
   const safeApiKey = apiKey ? sanitizeAttribute(apiKey, 'text') : '';
   const safeWidth = sanitizeAttribute(String(width), 'text');
   const safeHeight = sanitizeAttribute(String(height), 'text');
-  const safeZoom = Number.isInteger(zoom) && zoom >= 1 && zoom <= 20 ? zoom : 12;
+  // Zoom is numeric, but we still need to ensure it's safe and escaped
+  const zoomValue = Number.isInteger(zoom) && zoom >= 1 && zoom <= 20 ? zoom : 12;
+  const safeZoom = sanitizeAttribute(String(zoomValue), 'number');
 
   let embedCode = `<unimap-map 
   provider="${safeProvider}" 
@@ -160,8 +184,15 @@ function generateUniMapEmbedCode(config) {
     // For markers, we need coordinates, not addresses
     if (isValidCoordinates(marker.location)) {
       const [lat, lng] = marker.location.trim().split(',');
-      const safeLat = sanitizeAttribute(lat.trim(), 'number');
-      const safeLng = sanitizeAttribute(lng.trim(), 'number');
+      // Validate and escape each coordinate component
+      const latNum = parseFloat(lat.trim());
+      const lngNum = parseFloat(lng.trim());
+      if (isNaN(latNum) || isNaN(lngNum) || !isFinite(latNum) || !isFinite(lngNum)) {
+        // Invalid coordinates, skip this marker
+        return;
+      }
+      const safeLat = sanitizeAttribute(String(latNum), 'number');
+      const safeLng = sanitizeAttribute(String(lngNum), 'number');
       const safeTitle = sanitizeAttribute(marker.title || '', 'text');
       const safeLabel = marker.label ? sanitizeAttribute(marker.label, 'text') : '';
       
@@ -169,20 +200,31 @@ function generateUniMapEmbedCode(config) {
     } else {
       // For addresses, we'd need to geocode first or use a different approach
       // For now, skip markers with addresses (they should be geocoded first via API)
-      console.warn(`Marker location "${marker.location}" is not in coordinate format. Coordinates required for lat/lng attributes.`);
+      // Escape the location in the warning message to prevent XSS in logs
+      const safeLocation = escapeHtml(String(marker.location || ''));
+      console.warn(`Marker location "${safeLocation}" is not in coordinate format. Coordinates required for lat/lng attributes.`);
     }
   });
 
   // Add routes
   routes.forEach(route => {
+    if (!route.locations || !Array.isArray(route.locations)) {
+      return;
+    }
+    
+    // Filter valid coordinates and escape each one
     const safeLocations = route.locations
       .filter(loc => isValidCoordinates(loc))
-      .map(loc => sanitizeAttribute(loc.trim(), 'text'))
+      .map(loc => sanitizeAttribute(loc.trim(), 'coordinate'))
       .join(';');
     
     if (safeLocations) {
       const safeStrokeColor = sanitizeAttribute(route.strokeColor || '#007bff', 'text');
-      const safeStrokeWeight = Number.isInteger(route.strokeWeight) && route.strokeWeight > 0 ? route.strokeWeight : 3;
+      // Validate and escape stroke weight
+      const strokeWeight = Number.isInteger(route.strokeWeight) && route.strokeWeight > 0 
+        ? route.strokeWeight 
+        : 3;
+      const safeStrokeWeight = sanitizeAttribute(String(strokeWeight), 'number');
       
       embedCode += `  <unimap-route coords="${safeLocations}" stroke-color="${safeStrokeColor}" stroke-weight="${safeStrokeWeight}"></unimap-route>\n`;
     }
