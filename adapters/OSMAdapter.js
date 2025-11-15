@@ -707,16 +707,29 @@ export class OSMAdapter extends BaseAdapter {
   }
 
   destroy() {
-    this.eventListeners.forEach((listeners, event) => {
-      listeners.forEach(callback => {
-        this.map.off(event, callback);
+    // Clear event listeners if map exists
+    if (this.map) {
+      this.eventListeners.forEach((listeners, event) => {
+        listeners.forEach(callback => {
+          try {
+            this.map.off(event, callback);
+          } catch (e) {
+            // Ignore errors if map is already destroyed
+          }
+        });
       });
-    });
+      
+      // Remove all layers
+      try {
+        this.map.eachLayer(layer => {
+          this.map.removeLayer(layer);
+        });
+      } catch (e) {
+        // Ignore errors if map is already destroyed
+      }
+    }
+    
     this.eventListeners.clear();
-
-    this.map.eachLayer(layer => {
-      this.map.removeLayer(layer);
-    });
 
     this.markers.clear();
     this.polylines.clear();
@@ -727,7 +740,11 @@ export class OSMAdapter extends BaseAdapter {
     this.currentBaseLayer = null;
 
     if (this.map) {
-      this.map.remove();
+      try {
+        this.map.remove();
+      } catch (e) {
+        // Ignore errors if map is already removed
+      }
       this.map = null;
     }
   }

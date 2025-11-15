@@ -1,4 +1,4 @@
-// Version: 2.2.11 - Custom Markers & Enhanced Features
+// Version: 2.3.0 - Custom HTML Element & Secure API Key Support
 import { SUPPORTED_PROVIDERS } from './utils/constants.js';
 import { throwIfMissing } from './utils/common.js';
 
@@ -67,152 +67,202 @@ export class UniMap {
     await this.adapter.init();
   }
 
+  _ensureInitialized() {
+    if (!this.adapter) {
+      throw new Error('Map not initialized. Call init() first.');
+    }
+  }
+
   addMarker(options) {
+    this._ensureInitialized();
     return this.adapter.addMarker(options);
   }
 
   addCustomMarker(options) {
+    this._ensureInitialized();
     return this.adapter.addCustomMarker(options);
   }
 
   addCustomMarkers(markersArray) {
+    this._ensureInitialized();
     return this.adapter.addCustomMarkers(markersArray);
   }
 
   onMarkerClick(markerId, callback, options = {}) {
+    this._ensureInitialized();
     return this.adapter.onMarkerClick(markerId, callback, options);
   }
 
   removeMarker(markerId) {
+    this._ensureInitialized();
     return this.adapter.removeMarker(markerId);
   }
 
   updateMarker(markerId, options) {
+    this._ensureInitialized();
     return this.adapter.updateMarker(markerId, options);
   }
 
   setCenter(coords) {
+    this._ensureInitialized();
     return this.adapter.setCenter(coords);
   }
 
   getCenter() {
+    this._ensureInitialized();
     return this.adapter.getCenter();
   }
 
   setZoom(level) {
+    this._ensureInitialized();
     return this.adapter.setZoom(level);
   }
 
   getZoom() {
+    this._ensureInitialized();
     return this.adapter.getZoom();
   }
 
   zoomIn() {
+    this._ensureInitialized();
     return this.adapter.zoomIn();
   }
 
   zoomOut() {
+    this._ensureInitialized();
     return this.adapter.zoomOut();
   }
 
   panTo(coords) {
+    this._ensureInitialized();
     return this.adapter.panTo(coords);
   }
 
   fitBounds(bounds) {
+    this._ensureInitialized();
     return this.adapter.fitBounds(bounds);
   }
 
   geocode(address) {
+    this._ensureInitialized();
     return this.adapter.geocode(address);
   }
 
   reverseGeocode(lat, lng) {
+    this._ensureInitialized();
     return this.adapter.reverseGeocode(lat, lng);
   }
 
   drawRoute(coords, options = {}) {
+    this._ensureInitialized();
     return this.adapter.drawRoute(coords, options);
   }
 
   getDirections(origin, destination, options = {}) {
+    this._ensureInitialized();
     return this.adapter.getDirections(origin, destination, options);
   }
 
   drawPolygon(coords, options = {}) {
+    this._ensureInitialized();
     return this.adapter.drawPolygon(coords, options);
   }
 
   drawPolyline(coords, options = {}) {
+    this._ensureInitialized();
     return this.adapter.drawPolyline(coords, options);
   }
 
   drawCircle(center, radius, options = {}) {
+    this._ensureInitialized();
     return this.adapter.drawCircle(center, radius, options);
   }
 
   drawRectangle(bounds, options = {}) {
+    this._ensureInitialized();
     return this.adapter.drawRectangle(bounds, options);
   }
 
   enableTrafficLayer() {
+    this._ensureInitialized();
     return this.adapter.enableTrafficLayer();
   }
 
   disableTrafficLayer() {
+    this._ensureInitialized();
     return this.adapter.disableTrafficLayer();
   }
 
   addHeatMap(points, options = {}) {
+    this._ensureInitialized();
     return this.adapter.addHeatMap(points, options);
   }
 
   addTileLayer(url, options = {}) {
+    this._ensureInitialized();
     return this.adapter.addTileLayer(url, options);
   }
 
   removeLayer(layerId) {
+    this._ensureInitialized();
     return this.adapter.removeLayer(layerId);
   }
 
   trackUserLocation(callback, options = {}) {
+    this._ensureInitialized();
     return this.adapter.trackUserLocation(callback, options);
   }
 
   getUserLocation() {
+    this._ensureInitialized();
     return this.adapter.getUserLocation();
   }
 
   indoorMaps(enable) {
+    this._ensureInitialized();
     return this.adapter.indoorMaps(enable);
   }
 
   applyMapStyle(style) {
+    this._ensureInitialized();
     return this.adapter.applyMapStyle(style);
   }
 
   enable3D(enable) {
+    this._ensureInitialized();
     return this.adapter.enable3D(enable);
   }
 
   on(event, callback) {
+    this._ensureInitialized();
     return this.adapter.on(event, callback);
   }
 
   off(event, callback) {
+    this._ensureInitialized();
     return this.adapter.off(event, callback);
   }
 
   getBounds() {
+    this._ensureInitialized();
     return this.adapter.getBounds();
   }
 
   getContainer() {
+    if (!this.adapter) {
+      // Return container element if available, even if not initialized
+      const container = document.getElementById(this.containerId);
+      return container || null;
+    }
     return this.adapter.getContainer();
   }
 
   destroy() {
-    return this.adapter.destroy();
+    if (!this.adapter) {
+      return;
+    }
+    this.adapter.destroy();
+    this.adapter = null;
   }
 }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UniMap - Test All Providers</title>
+    <title>UniMap - Custom Element Test (All Providers & Features)</title>
     <style>
         :root {
             --primary: #667eea;
@@ -60,7 +60,7 @@
             background: white;
             padding: 25px;
             border-radius: 12px;
-             margin-bottom: 20px;
+            margin-bottom: 20px;
             box-shadow: 0 8px 24px var(--shadow-lg);
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -124,7 +124,7 @@
 
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px  12px var(--shadow-lg);
+            box-shadow: 0 6px 12px var(--shadow-lg);
         }
 
         button:active {
@@ -147,7 +147,7 @@
             background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%);
         }
 
-        #map {
+        unimap-map {
             height: 650px;
             width: 100%;
             border-radius: 12px;
@@ -155,6 +155,7 @@
             background: #e0e0e0;
             margin-bottom: 25px;
             border: 3px solid white;
+            display: block;
         }
 
         .status {
@@ -225,6 +226,7 @@
         .section-markers h3::before { content: '📍'; }
         .section-interactions h3::before { content: '👆'; }
         .section-features h3::before { content: '🗺️'; }
+        .section-declarative h3::before { content: '📝'; }
 
         .note {
             background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
@@ -261,7 +263,7 @@
                 grid-template-columns: 1fr;
             }
 
-            #map {
+            unimap-map {
                 height: 400px;
             }
 
@@ -273,12 +275,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>🗺️ UniMap - All Providers Test</h1>
+        <h1>🗺️ UniMap - Custom Element Test</h1>
+        <p class="subtitle">Test all providers and features using the &lt;unimap&gt; custom HTML element</p>
         
         <div class="controls">
             <div class="control-group">
                 <label for="provider">Map Provider</label>
-                <select id="provider" onchange="toggleMapIdField()">
+                <select id="provider" onchange="updateMapProvider()">
                     <option value="google">Google Maps</option>
                     <option value="mapbox">Mapbox</option>
                     <option value="bing">Bing Maps</option>
@@ -309,10 +312,32 @@
             </div>
         </div>
 
-        <div id="map"></div>
+        <!-- Custom Element Map -->
+        <!-- Note: Custom element names must contain a hyphen per Web Components spec -->
+        <unimap-map 
+            id="unimap-element"
+            provider="google"
+            center="37.7749,-122.4194"
+            zoom="13"
+            width="100%"
+            height="650px"
+            zoom-control="true"
+            map-type-control="true">
+        </unimap-map>
+
+        <div class="test-section section-declarative">
+            <h3>Declarative Features (HTML)</h3>
+            <p style="margin-bottom: 15px; color: #6b7280;">These features are defined in HTML using child elements:</p>
+            <div class="test-buttons">
+                <button onclick="addDeclarativeMarker()">📍 Add Declarative Marker</button>
+                <button onclick="addDeclarativeRoute()">🛣️ Add Declarative Route</button>
+                <button onclick="addDeclarativeShapes()">🔷 Add Declarative Shapes</button>
+                <button onclick="clearDeclarative()">🗑️ Clear Declarative</button>
+            </div>
+        </div>
 
         <div class="test-section">
-            <h3>Basic Features</h3>
+            <h3>Basic Features (Programmatic)</h3>
             <div class="test-buttons">
                 <button onclick="testAddMarker()">📍 Add Marker</button>
                 <button onclick="testGeocode()">🔍 Geocode</button>
@@ -361,185 +386,268 @@
         </div>
 
         <div class="note">
-            <strong>Note:</strong> This test page requires valid API keys for each provider. 
-            Some providers may not work without proper CORS configuration when loaded from file:// 
-            Use a local server for best results.
+            <strong>Note:</strong> This test page uses the &lt;unimap-map&gt; custom HTML element (custom elements must contain a hyphen per Web Components spec). 
+            Enter an API key and click Initialize Map. The map supports both declarative (HTML) and programmatic (JavaScript) features.
         </div>
     </div>
 
-    <script src="../build/unimap.mini.js" onerror="console.error('Failed to load UniMap bundle!'); alert('Error: Failed to load UniMap bundle. Please check the file path.');"></script>
-    <script>
-        // Using global UniMap from the built bundle
-        
-        // Verify UniMap is loaded
-        if (typeof UniMap === 'undefined') {
-            console.error('❌ UniMap is not defined! Check if build/unimap.mini.js loaded correctly.');
-            alert('Error: UniMap bundle failed to load. Please check the console and verify build/unimap.mini.js exists.');
-        } else {
-            console.log('✅ UniMap loaded successfully');
-        }
+    <script type="module">
+        import '../unimap-element.js';
 
-        let map = null;
+        // Global variables
+        let mapInstance = null;
         let markers = [];
         let shapes = [];
+        let declarativeElements = [];
 
-        window.initMap = async function() {
+        // Wait for custom element to be defined
+        if (customElements.get('unimap-map')) {
+            console.log('✅ UniMap custom element loaded');
+        }
+
+        // Define addStatus first so it's available for event listeners
+        window.addStatus = function(message, type) {
+            const log = document.getElementById('statusLog');
+            if (!log) return;
+            const item = document.createElement('div');
+            item.className = `status-item status-${type}`;
+            item.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.insertBefore(item, log.firstChild);
+            
+            while (log.children.length > 20) {
+                log.removeChild(log.lastChild);
+            }
+        };
+
+        // Listen for map initialization
+        document.addEventListener('unimap:initialized', (event) => {
+            mapInstance = event.detail.unimap;
+            window.window.addStatus('✅ Map initialized successfully!', 'success');
+            console.log('Map instance:', mapInstance);
+        });
+
+        document.addEventListener('unimap:error', (event) => {
+            window.window.addStatus(`❌ Map error: ${event.detail.error.message}`, 'error');
+        });
+
+        // Make functions globally available (outside module scope)
+        window.initMap = function() {
             const provider = document.getElementById('provider').value;
             const apiKey = document.getElementById('apiKey').value;
             const mapId = document.getElementById('mapId')?.value;
 
             if (!apiKey) {
-                addStatus('Please enter an API key', 'error');
+                window.addStatus('Please enter an API key', 'error');
                 return;
             }
 
-            try {
-                addStatus(`Initializing ${provider} map...`, 'success');
-                
-                const options = {
-                    center: { lat: 37.7749, lng: -122.4194 }, // San Francisco
-                    zoom: 13
-                };
-
-                // Add Map ID for Google Maps
-                if (provider === 'google' && mapId) {
-                    options.mapId = mapId;
-                }
-                
-                map = new UniMap({
-                    provider: provider,
-                    apiKey: apiKey,
-                    containerId: 'map',
-                    options: options
-                });
-
-                await map.init();
-                addStatus(`✅ ${provider} map initialized successfully!`, 'success');
-
-                // Test basic functionality
-                setTimeout(() => {
-                    testAddMarker();
-                }, 1000);
-
-            } catch (error) {
-                addStatus(`❌ Error initializing map: ${error.message}`, 'error');
-                console.error(error);
+            const mapElement = document.getElementById('unimap-element');
+            
+            // Set provider first
+            mapElement.setAttribute('provider', provider);
+            
+            // Set map ID if provided (before API key to ensure it's included in options)
+            if (provider === 'google' && mapId) {
+                mapElement.setAttribute('map-id', mapId);
+            } else {
+                mapElement.removeAttribute('map-id');
             }
+            
+            // Set API key - this will trigger reinitialization
+            mapElement.setApiKey(apiKey, true); // Reinit to apply changes
+            
+            window.addStatus(`Initializing ${provider} map...`, 'success');
         };
 
+        window.updateMapProvider = function() {
+            const provider = document.getElementById('provider').value;
+            const mapIdGroup = document.getElementById('mapIdGroup');
+            mapIdGroup.style.display = provider === 'google' ? 'block' : 'none';
+        };
+
+        window.addDeclarativeMarker = function() {
+            const mapElement = document.getElementById('unimap-element');
+            const center = mapInstance ? mapInstance.getCenter() : { lat: 37.7749, lng: -122.4194 };
+            
+            const marker = document.createElement('unimap-marker');
+            marker.setAttribute('lat', (center.lat + (Math.random() - 0.5) * 0.02).toFixed(6));
+            marker.setAttribute('lng', (center.lng + (Math.random() - 0.5) * 0.02).toFixed(6));
+            marker.setAttribute('title', 'Declarative Marker');
+            marker.setAttribute('label', '📍');
+            
+            mapElement.appendChild(marker);
+            declarativeElements.push(marker);
+            window.window.addStatus('✅ Declarative marker added via HTML', 'success');
+        };
+
+        window.addDeclarativeRoute = function() {
+            const mapElement = document.getElementById('unimap-element');
+            const center = mapInstance ? mapInstance.getCenter() : { lat: 37.7749, lng: -122.4194 };
+            
+            const route = document.createElement('unimap-route');
+            route.setAttribute('coords', 
+                `${center.lat},${center.lng};${center.lat + 0.01},${center.lng + 0.01};${center.lat + 0.02},${center.lng}`
+            );
+            route.setAttribute('stroke-color', '#FF0000');
+            route.setAttribute('stroke-weight', '5');
+            
+            mapElement.appendChild(route);
+            declarativeElements.push(route);
+            window.addStatus('✅ Declarative route added via HTML', 'success');
+        };
+
+        window.addDeclarativeShapes = function() {
+            const mapElement = document.getElementById('unimap-element');
+            const center = mapInstance ? mapInstance.getCenter() : { lat: 37.7749, lng: -122.4194 };
+            
+            // Circle
+            const circle = document.createElement('unimap-circle');
+            circle.setAttribute('center', `${center.lat},${center.lng}`);
+            circle.setAttribute('radius', '500');
+            circle.setAttribute('stroke-color', '#0000FF');
+            circle.setAttribute('fill-color', '#0000FF');
+            circle.setAttribute('fill-opacity', '0.2');
+            mapElement.appendChild(circle);
+            declarativeElements.push(circle);
+            
+            // Polygon
+            const polygon = document.createElement('unimap-polygon');
+            polygon.setAttribute('coords', 
+                `${center.lat - 0.005},${center.lng - 0.005};${center.lat + 0.005},${center.lng - 0.005};${center.lat + 0.005},${center.lng + 0.005};${center.lat - 0.005},${center.lng + 0.005}`
+            );
+            polygon.setAttribute('stroke-color', '#00FF00');
+            polygon.setAttribute('fill-color', '#00FF00');
+            polygon.setAttribute('fill-opacity', '0.3');
+            mapElement.appendChild(polygon);
+            declarativeElements.push(polygon);
+            
+            window.addStatus('✅ Declarative shapes added via HTML', 'success');
+        };
+
+        window.clearDeclarative = function() {
+            declarativeElements.forEach(el => el.remove());
+            declarativeElements = [];
+            window.addStatus('✅ Declarative elements cleared', 'success');
+        };
+
+        // Programmatic features (using mapInstance) - all functions are on window
         window.testAddMarker = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                const markerId = map.addMarker({
-                    lat: 37.7749 + (Math.random() - 0.5) * 0.02,
-                    lng: -122.4194 + (Math.random() - 0.5) * 0.02,
+                const center = mapInstance.getCenter();
+                const markerId = mapInstance.addMarker({
+                    lat: center.lat + (Math.random() - 0.5) * 0.02,
+                    lng: center.lng + (Math.random() - 0.5) * 0.02,
                     title: 'Test Marker',
                     label: '📍'
                 });
                 markers.push(markerId);
-                addStatus(`✅ Marker added: ${markerId}`, 'success');
+                window.addStatus(`✅ Marker added: ${markerId}`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding marker: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding marker: ${error.message}`, 'error');
             }
         };
 
         window.testGeocode = async function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                addStatus('Testing geocoding...', 'success');
-                const result = await map.geocode('Golden Gate Bridge, San Francisco');
-                addStatus(`✅ Geocoding result: ${result.formattedAddress}`, 'success');
+                window.addStatus('Testing geocoding...', 'success');
+                const result = await mapInstance.geocode('Golden Gate Bridge, San Francisco');
+                window.addStatus(`✅ Geocoding result: ${result.formattedAddress}`, 'success');
                 
-                const markerId = map.addMarker({
+                const markerId = mapInstance.addMarker({
                     lat: result.lat,
                     lng: result.lng,
                     title: result.formattedAddress
                 });
                 markers.push(markerId);
                 
-                map.setCenter({ lat: result.lat, lng: result.lng });
+                mapInstance.setCenter({ lat: result.lat, lng: result.lng });
             } catch (error) {
-                addStatus(`❌ Geocoding error: ${error.message}`, 'error');
+                window.addStatus(`❌ Geocoding error: ${error.message}`, 'error');
             }
         };
 
         window.testReverseGeocode = async function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                addStatus('Testing reverse geocoding...', 'success');
-                const center = map.getCenter();
-                const result = await map.reverseGeocode(center.lat, center.lng);
-                addStatus(`✅ Reverse geocoding result: ${result.formattedAddress}`, 'success');
+                window.addStatus('Testing reverse geocoding...', 'success');
+                const center = mapInstance.getCenter();
+                const result = await mapInstance.reverseGeocode(center.lat, center.lng);
+                window.addStatus(`✅ Reverse geocoding result: ${result.formattedAddress}`, 'success');
             } catch (error) {
-                addStatus(`❌ Reverse geocoding error: ${error.message}`, 'error');
+                window.addStatus(`❌ Reverse geocoding error: ${error.message}`, 'error');
             }
         };
 
         window.testDrawRoute = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
+                const center = mapInstance.getCenter();
                 const coords = [
-                    { lat: 37.7749, lng: -122.4194 },
-                    { lat: 37.7849, lng: -122.4294 },
-                    { lat: 37.7949, lng: -122.4394 }
+                    { lat: center.lat, lng: center.lng },
+                    { lat: center.lat + 0.01, lng: center.lng + 0.01 },
+                    { lat: center.lat + 0.02, lng: center.lng }
                 ];
 
-                const routeId = map.drawRoute(coords, {
+                const routeId = mapInstance.drawRoute(coords, {
                     strokeColor: '#FF0000',
                     strokeWeight: 5
                 });
                 shapes.push(routeId);
-                addStatus(`✅ Route drawn: ${routeId}`, 'success');
+                window.addStatus(`✅ Route drawn: ${routeId}`, 'success');
             } catch (error) {
-                addStatus(`❌ Error drawing route: ${error.message}`, 'error');
+                window.addStatus(`❌ Error drawing route: ${error.message}`, 'error');
             }
         };
 
         window.testDirections = async function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                addStatus('Testing directions...', 'success');
-                const result = await map.getDirections(
-                    { lat: 37.7749, lng: -122.4194 },
-                    { lat: 37.8049, lng: -122.4494 }
+                window.addStatus('Testing directions...', 'success');
+                const center = mapInstance.getCenter();
+                const result = await mapInstance.getDirections(
+                    { lat: center.lat, lng: center.lng },
+                    { lat: center.lat + 0.03, lng: center.lng + 0.03 }
                 );
-                addStatus(`✅ Directions: Distance ${Math.round(result.distance)}m, Duration ${Math.round(result.duration)}s`, 'success');
-                shapes.push(result.routeId);
+                window.addStatus(`✅ Directions: Distance ${Math.round(result.distance)}m, Duration ${Math.round(result.duration)}s`, 'success');
+                if (result.routeId) shapes.push(result.routeId);
             } catch (error) {
-                addStatus(`❌ Directions error: ${error.message}`, 'error');
+                window.addStatus(`❌ Directions error: ${error.message}`, 'error');
             }
         };
 
         window.testShapes = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                // Test circle
-                const circleId = map.drawCircle(
-                    { lat: 37.7849, lng: -122.4294 },
+                const center = mapInstance.getCenter();
+                
+                const circleId = mapInstance.drawCircle(
+                    { lat: center.lat + 0.01, lng: center.lng + 0.01 },
                     500,
                     {
                         fillColor: '#FF0000',
@@ -549,68 +657,68 @@
                 );
                 shapes.push(circleId);
 
-                // Test polygon
-                const polygonId = map.drawPolygon([
-                    { lat: 37.7649, lng: -122.4094 },
-                    { lat: 37.7749, lng: -122.4094 },
-                    { lat: 37.7749, lng: -122.4194 },
-                    { lat: 37.7649, lng: -122.4194 }
+                const polygonId = mapInstance.drawPolygon([
+                    { lat: center.lat - 0.005, lng: center.lng - 0.005 },
+                    { lat: center.lat + 0.005, lng: center.lng - 0.005 },
+                    { lat: center.lat + 0.005, lng: center.lng + 0.005 },
+                    { lat: center.lat - 0.005, lng: center.lng + 0.005 }
                 ], {
                     fillColor: '#00FF00',
                     strokeColor: '#000000'
                 });
                 shapes.push(polygonId);
 
-                addStatus(`✅ Shapes added`, 'success');
+                window.addStatus(`✅ Shapes added`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding shapes: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding shapes: ${error.message}`, 'error');
             }
         };
 
         window.testHeatmap = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
+                const center = mapInstance.getCenter();
                 const points = [];
                 for (let i = 0; i < 20; i++) {
                     points.push({
-                        lat: 37.7749 + (Math.random() - 0.5) * 0.05,
-                        lng: -122.4194 + (Math.random() - 0.5) * 0.05,
+                        lat: center.lat + (Math.random() - 0.5) * 0.05,
+                        lng: center.lng + (Math.random() - 0.5) * 0.05,
                         weight: Math.random()
                     });
                 }
 
-                const heatmapId = map.addHeatMap(points, {
+                const heatmapId = mapInstance.addHeatMap(points, {
                     radius: 30,
                     opacity: 0.6
                 });
                 
                 if (heatmapId) {
                     shapes.push(heatmapId);
-                    addStatus(`✅ Heatmap added`, 'success');
+                    window.addStatus(`✅ Heatmap added`, 'success');
                 } else {
-                    addStatus('ℹ️ Heatmap not supported by this provider', 'success');
+                    window.addStatus('ℹ️ Heatmap not supported by this provider', 'success');
                 }
             } catch (error) {
-                addStatus(`❌ Error adding heatmap: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding heatmap: ${error.message}`, 'error');
             }
         };
 
         window.testUserLocation = async function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                addStatus('Getting user location...', 'success');
-                const location = await map.getUserLocation();
-                addStatus(`✅ User location: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`, 'success');
+                window.addStatus('Getting user location...', 'success');
+                const location = await mapInstance.getUserLocation();
+                window.addStatus(`✅ User location: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`, 'success');
                 
-                const markerId = map.addMarker({
+                const markerId = mapInstance.addMarker({
                     lat: location.lat,
                     lng: location.lng,
                     title: 'Your Location',
@@ -618,42 +726,41 @@
                 });
                 markers.push(markerId);
                 
-                map.setCenter({ lat: location.lat, lng: location.lng });
+                mapInstance.setCenter({ lat: location.lat, lng: location.lng });
             } catch (error) {
-                addStatus(`❌ Location error: ${error.message}`, 'error');
+                window.addStatus(`❌ Location error: ${error.message}`, 'error');
             }
         };
 
         window.testCustomMarker = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                const center = map.getCenter();
-                const markerId = map.addCustomMarker({
+                const center = mapInstance.getCenter();
+                const markerId = mapInstance.addCustomMarker({
                     lat: center.lat,
                     lng: center.lng,
                     html: '<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 12px; border-radius: 8px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">📍 Custom HTML Marker</div>',
                     className: 'custom-marker'
                 });
                 markers.push(markerId);
-                addStatus(`✅ Custom marker added: ${markerId}`, 'success');
+                window.addStatus(`✅ Custom marker added: ${markerId}`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding custom marker: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding custom marker: ${error.message}`, 'error');
             }
         };
 
         window.testCustomMarkerIcon = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                const center = map.getCenter();
-                // Using a canvas to create a simple icon
+                const center = mapInstance.getCenter();
                 const canvas = document.createElement('canvas');
                 canvas.width = 32;
                 canvas.height = 32;
@@ -669,68 +776,58 @@
                 ctx.fillText('📍', 16, 16);
 
                 const iconUrl = canvas.toDataURL();
-                const markerId = map.addCustomMarker({
+                const markerId = mapInstance.addCustomMarker({
                     lat: center.lat + 0.005,
                     lng: center.lng + 0.005,
                     iconUrl: iconUrl,
                     iconSize: { width: 32, height: 32 }
                 });
                 markers.push(markerId);
-                addStatus(`✅ Custom marker (Icon URL) added: ${markerId}`, 'success');
+                window.addStatus(`✅ Custom marker (Icon URL) added: ${markerId}`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding custom marker: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding custom marker: ${error.message}`, 'error');
             }
         };
 
         window.testCustomMarkerStyled = function() {
-            if (!map) {
-                addStatus('Map not initialized',  'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                const center = map.getCenter();
+                const center = mapInstance.getCenter();
                 const markerIds = [];
                 
-                // Badge-style marker
-                const badgeId = map.addCustomMarker({
+                const badgeId = mapInstance.addCustomMarker({
                     lat: center.lat + 0.008,
                     lng: center.lng - 0.008,
                     html: '<div style="background: #10b981; color: white; padding: 6px 10px; border-radius: 20px; font-weight: bold; font-size: 12px;">✓ Badge</div>'
                 });
                 markerIds.push(badgeId);
                 
-                // Icon + text marker
-                const iconTextId = map.addCustomMarker({
+                const iconTextId = mapInstance.addCustomMarker({
                     lat: center.lat - 0.008,
-                    lng: center.lng +  0.008,
+                    lng: center.lng + 0.008,
                     html: '<div style="background: white; padding: 6px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 6px;"><span style="font-size: 20px;">⭐</span><span style="font-weight: bold; color: #333;">Star</span></div>'
                 });
                 markerIds.push(iconTextId);
                 
-                // Animated marker
-                const animatedId = map.addCustomMarker({
-                    lat: center.lat,
-                    lng: center.lng - 0.01,
-                    html: '<div style="background: #f59e0b; color: white; padding: 8px 12px; border-radius: 8px; animation: pulse 2s infinite;">🎯 Animated</div>'
-                });
-                markerIds.push(animatedId);
-                
                 markers.push(...markerIds);
-                addStatus(`✅ Added 3 styled custom markers (badge, icon+text, animated)`, 'success');
+                window.addStatus(`✅ Added 2 styled custom markers`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding styled markers: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding styled markers: ${error.message}`, 'error');
             }
         };
 
         window.testCustomMarkersArray = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                const center = map.getCenter();
+                const center = mapInstance.getCenter();
                 const markersArray = [];
                 
                 for (let i = 0; i < 5; i++) {
@@ -741,24 +838,24 @@
                     });
                 }
                 
-                const markerIds = map.addCustomMarkers(markersArray);
+                const markerIds = mapInstance.addCustomMarkers(markersArray);
                 markers.push(...markerIds);
-                addStatus(`✅ Added ${markerIds.length} custom markers from array`, 'success');
+                window.addStatus(`✅ Added ${markerIds.length} custom markers from array`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding custom markers: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding custom markers: ${error.message}`, 'error');
             }
         };
 
         window.testMarkerClick = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
                 if (markers.length === 0) {
-                    const center = map.getCenter();
-                    const markerId = map.addMarker({
+                    const center = mapInstance.getCenter();
+                    const markerId = mapInstance.addMarker({
                         lat: center.lat,
                         lng: center.lng,
                         title: 'Click me!',
@@ -768,31 +865,31 @@
                 }
 
                 const markerId = markers[markers.length - 1];
-                const centerPos = map.getCenter();
+                const centerPos = mapInstance.getCenter();
                 
-                map.onMarkerClick(markerId, () => {
-                    addStatus('✅ Marker clicked!', 'success');
+                mapInstance.onMarkerClick(markerId, () => {
+                    window.addStatus('✅ Marker clicked!', 'success');
                 }, {
                     popupHtml: `<div style="padding: 10px;"><h3 style="margin: 0 0 8px 0;">Location Details</h3><p>Lat: ${centerPos.lat.toFixed(4)}</p><p>Lng: ${centerPos.lng.toFixed(4)}</p></div>`,
                     toastMessage: 'You clicked the marker!'
                 });
                 
-                addStatus(`✅ Click handler added to marker ${markerId}. Click to test!`, 'success');
+                window.addStatus(`✅ Click handler added to marker ${markerId}. Click to test!`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
             }
         };
 
         window.testMarkerClickToast = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
                 if (markers.length === 0) {
-                    const center = map.getCenter();
-                    const markerId = map.addMarker({
+                    const center = mapInstance.getCenter();
+                    const markerId = mapInstance.addMarker({
                         lat: center.lat,
                         lng: center.lng,
                         title: 'Click for toast!',
@@ -803,29 +900,29 @@
 
                 const markerId = markers[markers.length - 1];
                 
-                map.onMarkerClick(markerId, () => {
-                    addStatus('✅ Toast marker clicked!', 'success');
+                mapInstance.onMarkerClick(markerId, () => {
+                    window.addStatus('✅ Toast marker clicked!', 'success');
                 }, {
                     toastMessage: '🎉 This is a toast notification!',
                     toastDuration: 3000
                 });
                 
-                addStatus(`✅ Toast-only handler added to marker ${markerId}. Click to test!`, 'success');
+                window.addStatus(`✅ Toast-only handler added to marker ${markerId}. Click to test!`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
             }
         };
 
         window.testMarkerClickPopup = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
                 if (markers.length === 0) {
-                    const center = map.getCenter();
-                    const markerId = map.addMarker({
+                    const center = mapInstance.getCenter();
+                    const markerId = mapInstance.addMarker({
                         lat: center.lat,
                         lng: center.lng,
                         title: 'Click for popup!',
@@ -835,30 +932,30 @@
                 }
 
                 const markerId = markers[markers.length - 1];
-                const centerPos = map.getCenter();
+                const centerPos = mapInstance.getCenter();
                 
-                map.onMarkerClick(markerId, () => {
-                    addStatus('✅ Popup marker clicked!', 'success');
+                mapInstance.onMarkerClick(markerId, () => {
+                    window.addStatus('✅ Popup marker clicked!', 'success');
                 }, {
-                    popupHtml: `<div style="padding: 15px; max-width: 250px;"><h3 style="margin: 0 0 10px 0; color: #667eea;">Information</h3><p style="margin: 0;">Coordinates: ${centerPos.lat.toFixed(4)}, ${centerPos.lng.toFixed(4)}</p><p style="margin: 10px 0 0 0; color: #6b7280; font-size: 0.9em;">This is a custom popup with HTML content.</p></div>`
+                    popupHtml: `<div style="padding: 15px; max-width: 250px;"><h3 style="margin: 0 0 10px 0; color: #667eea;">Information</h3><p style="margin: 0;">Coordinates: ${centerPos.lat.toFixed(4)}, ${centerPos.lng.toFixed(4)}</p></div>`
                 });
                 
-                addStatus(`✅ Popup-only handler added to marker ${markerId}. Click to test!`, 'success');
+                window.addStatus(`✅ Popup-only handler added to marker ${markerId}. Click to test!`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
             }
         };
 
         window.testMarkerClickCallback = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
                 if (markers.length === 0) {
-                    const center = map.getCenter();
-                    const markerId = map.addMarker({
+                    const center = mapInstance.getCenter();
+                    const markerId = mapInstance.addMarker({
                         lat: center.lat,
                         lng: center.lng,
                         title: 'Click for callback!',
@@ -869,26 +966,26 @@
 
                 const markerId = markers[markers.length - 1];
                 
-                map.onMarkerClick(markerId, () => {
-                    addStatus('✅ Callback-only marker clicked! This is just a callback without popup or toast.', 'success');
+                mapInstance.onMarkerClick(markerId, () => {
+                    window.addStatus('✅ Callback-only marker clicked!', 'success');
                 });
                 
-                addStatus(`✅ Callback-only handler added to marker ${markerId}. Click to test!`, 'success');
+                window.addStatus(`✅ Callback-only handler added to marker ${markerId}. Click to test!`, 'success');
             } catch (error) {
-                addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding click handler: ${error.message}`, 'error');
             }
         };
 
         window.testUpdateMarker = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
                 if (markers.length === 0) {
-                    const center = map.getCenter();
-                    const markerId = map.addMarker({
+                    const center = mapInstance.getCenter();
+                    const markerId = mapInstance.addMarker({
                         lat: center.lat,
                         lng: center.lng,
                         title: 'Original Position',
@@ -898,9 +995,9 @@
                 }
 
                 const markerId = markers[markers.length - 1];
-                const center = map.getCenter();
+                const center = mapInstance.getCenter();
                 
-                map.updateMarker(markerId, {
+                mapInstance.updateMarker(markerId, {
                     position: {
                         lat: center.lat + (Math.random() - 0.5) * 0.01,
                         lng: center.lng + (Math.random() - 0.5) * 0.01
@@ -908,93 +1005,80 @@
                     title: 'Updated Position'
                 });
                 
-                addStatus(`✅ Marker ${markerId} updated successfully!`, 'success');
+                window.addStatus(`✅ Marker ${markerId} updated successfully!`, 'success');
             } catch (error) {
-                addStatus(`❌ Error updating marker: ${error.message}`, 'error');
+                window.addStatus(`❌ Error updating marker: ${error.message}`, 'error');
             }
         };
 
         window.testMapEvents = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                map.on('click', (event) => {
-                    addStatus(`✅ Map clicked at: ${event.lat.toFixed(4)}, ${event.lng.toFixed(4)}`, 'info');
+                mapInstance.on('click', (event) => {
+                    window.addStatus(`✅ Map clicked at: ${event.lat.toFixed(4)}, ${event.lng.toFixed(4)}`, 'success');
                 });
 
-                map.on('zoom', (event) => {
-                    addStatus(`✅ Map zoomed to: ${event.zoom}`, 'info');
+                mapInstance.on('zoom', (event) => {
+                    window.addStatus(`✅ Map zoomed to: ${event.zoom}`, 'success');
                 });
 
-                addStatus('✅ Map event listeners added (click, zoom). Interact with the map to test!', 'success');
+                window.addStatus('✅ Map event listeners added (click, zoom). Interact with the map to test!', 'success');
             } catch (error) {
-                addStatus(`❌ Error adding map events: ${error.message}`, 'error');
+                window.addStatus(`❌ Error adding map events: ${error.message}`, 'error');
             }
         };
 
         window.testMapNavigation = function() {
-            if (!map) {
-                addStatus('Map not initialized', 'error');
+            if (!mapInstance) {
+                window.addStatus('Map not initialized', 'error');
                 return;
             }
 
             try {
-                const center = map.getCenter();
+                const center = mapInstance.getCenter();
                 
-                // Test pan
-                map.panTo({ lat: center.lat + 0.01, lng: center.lng + 0.01 });
+                mapInstance.panTo({ lat: center.lat + 0.01, lng: center.lng + 0.01 });
                 
                 setTimeout(() => {
-                    map.setZoom(15);
+                    mapInstance.setZoom(15);
                 }, 500);
                 
                 setTimeout(() => {
-                    map.setZoom(12);
-                    map.setCenter({ lat: center.lat, lng: center.lng });
+                    mapInstance.setZoom(12);
+                    mapInstance.setCenter({ lat: center.lat, lng: center.lng });
                 }, 1000);
                 
-                addStatus('✅ Map navigation tested (pan, zoom in, zoom out)', 'success');
+                window.addStatus('✅ Map navigation tested (pan, zoom in, zoom out)', 'success');
             } catch (error) {
-                addStatus(`❌ Navigation error: ${error.message}`, 'error');
+                window.addStatus(`❌ Navigation error: ${error.message}`, 'error');
             }
         };
 
         window.clearMap = function() {
-            if (!map) return;
+            if (!mapInstance) return;
 
             try {
-                markers.forEach(id => map.removeMarker(id));
+                markers.forEach(id => mapInstance.removeMarker(id));
                 shapes.forEach(id => {
-                    try { map.removeLayer(id); } catch(e) {}
+                    try { mapInstance.removeLayer(id); } catch(e) {}
                 });
                 markers = [];
                 shapes = [];
-                addStatus('✅ Map cleared', 'success');
+                window.addStatus('✅ Map cleared', 'success');
             } catch (error) {
-                addStatus(`❌ Error clearing map: ${error.message}`, 'error');
+                window.addStatus(`❌ Error clearing map: ${error.message}`, 'error');
             }
         };
 
-        function addStatus(message, type) {
-            const log = document.getElementById('statusLog');
-            const item = document.createElement('div');
-            item.className = `status-item status-${type}`;
-            item.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            log.insertBefore(item, log.firstChild);
-            
-            // Keep only last 20 entries
-            while (log.children.length > 20) {
-                log.removeChild(log.lastChild);
-            }
-        }
 
-        // Auto-load first provider
         window.addEventListener('load', () => {
-            addStatus('UniMap test page loaded. Enter an API key and click Initialize Map.', 'success');
+            window.addStatus('UniMap custom element test page loaded. Enter an API key and click Initialize Map.', 'success');
         });
     </script>
 </body>
 </html>
+
