@@ -1,0 +1,19 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "UniMap - Universal Mapping Plugin",
+  "name_for_model": "unimap",
+  "description_for_human": "Create and display interactive maps with multiple providers (Google Maps, Mapbox, Bing Maps, OSM, etc.). Add markers, routes, shapes, geocode addresses, and get directions.",
+  "description_for_model": "UniMap is a universal mapping library that supports multiple map providers including Google Maps, Mapbox, Bing Maps, OpenStreetMap, Azure Maps, HERE Maps, TomTom, Yandex Maps, CARTO, and MapmyIndia. Use this plugin to create interactive maps, add markers at locations, draw routes between points, add shapes (polygons, circles, rectangles), geocode addresses to coordinates, get reverse geocoding, find directions between locations, and customize map styles. The plugin generates embeddable HTML code or map configurations that can be used in web applications.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://your-domain.com/.well-known/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://your-domain.com/logo.png",
+  "contact_email": "your-email@example.com",
+  "legal_info_url": "https://your-domain.com/legal"
+}
+
