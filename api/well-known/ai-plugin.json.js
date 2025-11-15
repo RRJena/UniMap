@@ -13,9 +13,25 @@ const __dirname = dirname(__filename);
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MAX = 100;
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour - cleanup old entries
 
 function getRateLimitKey(req) {
   return req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || 'unknown';
+}
+
+function cleanupRateLimitMap() {
+  const now = Date.now();
+  for (const [key, record] of rateLimitMap.entries()) {
+    // Remove entries older than the rate limit window
+    if (now - record.firstRequest > RATE_LIMIT_WINDOW) {
+      rateLimitMap.delete(key);
+    }
+  }
+}
+
+// Run cleanup periodically to prevent memory leaks
+if (typeof setInterval !== 'undefined') {
+  setInterval(cleanupRateLimitMap, CLEANUP_INTERVAL);
 }
 
 function checkRateLimit(req) {
@@ -23,7 +39,14 @@ function checkRateLimit(req) {
   const now = Date.now();
   const record = rateLimitMap.get(key);
 
-  if (!record || now - record.firstRequest > RATE_LIMIT_WINDOW) {
+  // Clean up expired entries on access
+  if (record && now - record.firstRequest > RATE_LIMIT_WINDOW) {
+    rateLimitMap.delete(key);
+    rateLimitMap.set(key, { firstRequest: now, count: 1 });
+    return true;
+  }
+
+  if (!record) {
     rateLimitMap.set(key, { firstRequest: now, count: 1 });
     return true;
   }

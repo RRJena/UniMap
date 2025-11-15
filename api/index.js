@@ -33,23 +33,68 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve plugin manifest
-app.get('/.well-known/ai-plugin.json', staticFileLimiter, (req, res) => {
-  res.sendFile(join(__dirname, '..', '.well-known', 'ai-plugin.json'));
-});
-
-// Serve OpenAPI spec
-app.get('/.well-known/openapi.yaml', staticFileLimiter, (req, res) => {
-  res.setHeader('Content-Type', 'text/yaml');
-  res.sendFile(join(__dirname, '..', '.well-known', 'openapi.yaml'));
-});
+// Note: .well-known routes are handled by separate serverless functions
+// (api/well-known/ai-plugin.json.js and api/well-known/openapi.yaml.js)
+// as configured in vercel.json. The Express app here handles /api/* routes only.
 
 // In-memory store for maps (use database in production)
 const maps = new Map();
 
+// Cleanup old map entries to prevent memory leaks
+const MAP_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+const MAP_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
+
+function cleanupOldMaps() {
+  const now = Date.now();
+  for (const [mapId, mapData] of maps.entries()) {
+    if (mapData.createdAt && (now - mapData.createdAt) > MAP_MAX_AGE) {
+      maps.delete(mapId);
+    }
+  }
+}
+
+// Run cleanup periodically
+setInterval(cleanupOldMaps, MAP_CLEANUP_INTERVAL);
+
 // Helper: Generate unique ID
 function generateId(prefix = 'map') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Escape HTML special characters to prevent XSS
+ * @param {string} str - String to escape
+ * @returns {string} - Escaped string safe for HTML attributes
+ */
+function escapeHtml(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+/**
+ * Validate and sanitize HTML attribute value
+ * @param {string} value - Value to sanitize
+ * @param {string} type - Type of attribute ('text', 'url', 'number')
+ * @returns {string} - Sanitized value
+ */
+function sanitizeAttribute(value, type = 'text') {
+  if (!value || typeof value !== 'string') return '';
+  
+  if (type === 'url') {
+    // Basic URL validation - remove script:, javascript:, data:, etc.
+    const unsafe = /^(javascript|data|vbscript|file|about):/i;
+    if (unsafe.test(value.trim())) {
+      return '';
+    }
+  }
+  
+  // Remove potentially dangerous characters
+  return escapeHtml(value).replace(/[<>'"]/g, '');
 }
 
 /**
@@ -71,37 +116,55 @@ function isValidCoordinates(str) {
 function generateUniMapEmbedCode(config) {
   const { location, provider = 'google', zoom = 12, width = '100%', height = '500px', apiKey, markers = [], routes = [] } = config;
   
-  // Parse location (could be "lat,lng" or address)
-  const center = isValidCoordinates(location)
-    ? location.trim()
-    : location;
+  // Sanitize all inputs
+  const safeProvider = sanitizeAttribute(provider, 'text');
+  const safeLocation = isValidCoordinates(location) 
+    ? location.trim() // Coordinates are numeric, safe to use
+    : sanitizeAttribute(location, 'text'); // Addresses need sanitization
+  const safeApiKey = apiKey ? sanitizeAttribute(apiKey, 'text') : '';
+  const safeWidth = sanitizeAttribute(String(width), 'text');
+  const safeHeight = sanitizeAttribute(String(height), 'text');
+  const safeZoom = Number.isInteger(zoom) && zoom >= 1 && zoom <= 20 ? zoom : 12;
 
   let embedCode = `<unimap-map 
-  provider="${provider}" 
-  ${apiKey ? `api-key="${apiKey}"` : ''}
-  center="${center}" 
-  zoom="${zoom}"
-  width="${width}"
-  height="${height}">\n`;
+  provider="${safeProvider}" 
+  ${safeApiKey ? `api-key="${safeApiKey}"` : ''}
+  center="${safeLocation}" 
+  zoom="${safeZoom}"
+  width="${safeWidth}"
+  height="${safeHeight}">\n`;
 
   // Add markers
   markers.forEach(marker => {
     // For markers, we need coordinates, not addresses
-    // If location is an address, use the location as-is (custom element will geocode it)
     if (isValidCoordinates(marker.location)) {
       const [lat, lng] = marker.location.trim().split(',');
-      embedCode += `  <unimap-marker lat="${lat.trim()}" lng="${lng.trim()}" title="${marker.title || ''}" ${marker.label ? `label="${marker.label}"` : ''}></unimap-marker>\n`;
+      const safeLat = sanitizeAttribute(lat.trim(), 'number');
+      const safeLng = sanitizeAttribute(lng.trim(), 'number');
+      const safeTitle = sanitizeAttribute(marker.title || '', 'text');
+      const safeLabel = marker.label ? sanitizeAttribute(marker.label, 'text') : '';
+      
+      embedCode += `  <unimap-marker lat="${safeLat}" lng="${safeLng}" title="${safeTitle}"${safeLabel ? ` label="${safeLabel}"` : ''}></unimap-marker>\n`;
     } else {
       // For addresses, we'd need to geocode first or use a different approach
       // For now, skip markers with addresses (they should be geocoded first via API)
-      // Alternatively, could add address attribute support if custom element supports it
       console.warn(`Marker location "${marker.location}" is not in coordinate format. Coordinates required for lat/lng attributes.`);
     }
   });
 
   // Add routes
   routes.forEach(route => {
-    embedCode += `  <unimap-route coords="${route.locations.join(';')}" stroke-color="${route.strokeColor || '#007bff'}" stroke-weight="${route.strokeWeight || 3}"></unimap-route>\n`;
+    const safeLocations = route.locations
+      .filter(loc => isValidCoordinates(loc))
+      .map(loc => sanitizeAttribute(loc.trim(), 'text'))
+      .join(';');
+    
+    if (safeLocations) {
+      const safeStrokeColor = sanitizeAttribute(route.strokeColor || '#007bff', 'text');
+      const safeStrokeWeight = Number.isInteger(route.strokeWeight) && route.strokeWeight > 0 ? route.strokeWeight : 3;
+      
+      embedCode += `  <unimap-route coords="${safeLocations}" stroke-color="${safeStrokeColor}" stroke-weight="${safeStrokeWeight}"></unimap-route>\n`;
+    }
   });
 
   embedCode += `</unimap-map>
@@ -131,7 +194,14 @@ app.post('/api/map/create', async (req, res) => {
       routes: []
     });
 
-    maps.set(mapId, { location, provider, zoom, markers: [], routes: [] });
+    maps.set(mapId, { 
+      location, 
+      provider, 
+      zoom, 
+      markers: [], 
+      routes: [],
+      createdAt: Date.now()
+    });
 
     res.json({
       success: true,
@@ -297,7 +367,15 @@ app.post('/api/map/create-with-features', async (req, res) => {
       shapes
     });
 
-    maps.set(mapId, { location, provider, zoom, markers, routes, shapes });
+    maps.set(mapId, { 
+      location, 
+      provider, 
+      zoom, 
+      markers, 
+      routes, 
+      shapes,
+      createdAt: Date.now()
+    });
 
     res.json({
       success: true,
@@ -315,6 +393,5 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'UniMap OpenAI Plugin' });
 });
 
-// Export for Vercel serverless
+// Export for Vercel serverless - wrap Express app properly
 export default app;
-
