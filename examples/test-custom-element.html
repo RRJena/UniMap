@@ -422,12 +422,12 @@
         // Listen for map initialization
         document.addEventListener('unimap:initialized', (event) => {
             mapInstance = event.detail.unimap;
-            window.window.addStatus('✅ Map initialized successfully!', 'success');
+            window.addStatus('✅ Map initialized successfully!', 'success');
             console.log('Map instance:', mapInstance);
         });
 
         document.addEventListener('unimap:error', (event) => {
-            window.window.addStatus(`❌ Map error: ${event.detail.error.message}`, 'error');
+            window.addStatus(`❌ Map error: ${event.detail.error.message}`, 'error');
         });
 
         // Make functions globally available (outside module scope)
@@ -477,7 +477,7 @@
             
             mapElement.appendChild(marker);
             declarativeElements.push(marker);
-            window.window.addStatus('✅ Declarative marker added via HTML', 'success');
+            window.addStatus('✅ Declarative marker added via HTML', 'success');
         };
 
         window.addDeclarativeRoute = function() {
