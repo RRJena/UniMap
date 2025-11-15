@@ -1,6 +1,6 @@
 {
   "name": "unimap",
-  "version": "2.2.12",
+  "version": "2.3.0",
   "description": "Unified mapping library for multiple map service providers - Google Maps, Mapbox, Bing Maps, OpenStreetMap, and more",
   "main": "unimap.js",
   "browser": "build/unimap.mini.js",
@@ -34,7 +34,7 @@
     "typescript"
   ],
   "author": "Rakesh Ranjan Jena",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/RRJena/UniMap.git"
@@ -53,13 +53,15 @@
   ],
   "files": [
     "unimap.js",
+    "unimap-element.js",
+    "unimap-complete.js",
     "build/",
     "adapters/",
     "utils/",
     "example/",
     "examples/",
     "README.md",
-    "LICENSE.md"
+    "LICENSE"
   ],
   "devDependencies": {
     "esbuild": "^0.25.11",
