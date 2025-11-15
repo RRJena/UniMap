@@ -36,6 +36,21 @@ function parseCoordinates(coordString) {
 }
 
 /**
+ * Parses an icon size string "width,height" into {width, height} object
+ * @param {string} sizeString - Size string in format "width,height"
+ * @returns {Object|null} - Parsed size object or null
+ */
+function parseIconSize(sizeString) {
+  if (!sizeString) return null;
+  const parts = sizeString.split(',').map(s => s.trim());
+  if (parts.length !== 2) return null;
+  const width = parseFloat(parts[0]);
+  const height = parseFloat(parts[1]);
+  if (isNaN(width) || isNaN(height)) return null;
+  return { width, height };
+}
+
+/**
  * Parses a JSON string or returns the value as-is
  * @param {string} value - Value to parse
  * @returns {*} - Parsed value
@@ -635,7 +650,7 @@ export class UniMapElement extends HTMLElement {
         lng,
         html: html || undefined,
         iconUrl: iconUrl || undefined,
-        iconSize: iconSize ? parseCoordinates(iconSize) : undefined,
+        iconSize: iconSize ? parseIconSize(iconSize) : undefined,
         className: element.getAttribute('class-name') || undefined,
         title: options.title
       };
