@@ -713,7 +713,7 @@ export class OSMAdapter extends BaseAdapter {
         listeners.forEach(callback => {
           try {
             this.map.off(event, callback);
-          } catch (e) {
+          } catch {
             // Ignore errors if map is already destroyed
           }
         });
@@ -724,7 +724,7 @@ export class OSMAdapter extends BaseAdapter {
         this.map.eachLayer(layer => {
           this.map.removeLayer(layer);
         });
-      } catch (e) {
+      } catch {
         // Ignore errors if map is already destroyed
       }
     }
@@ -742,7 +742,7 @@ export class OSMAdapter extends BaseAdapter {
     if (this.map) {
       try {
         this.map.remove();
-      } catch (e) {
+      } catch {
         // Ignore errors if map is already removed
       }
       this.map = null;
